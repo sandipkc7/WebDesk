@@ -94,12 +94,21 @@ All persistent runtime assets, binaries, and configurations are stored in `~/.lo
 
 ## 3. Prerequisites & Installation
 
+### ⚡ 1-Line Quick Installation
+Run this single command in your terminal to download and install WebDesk automatically:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
+```
+
+---
+
 ### Prerequisites
 * **Operating System**: Linux (Linux Mint, Ubuntu, Debian, or derivatives).
 * **Architecture**: `x86_64`.
 * **Runtime**: Python 3.8+ with standard library, `openssl`, `xrandr`, `pulseaudio` or `pipewire`.
 
-### Installation Steps
+### Manual Installation Steps
 
 1. Make the script executable:
    ```bash
