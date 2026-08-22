@@ -410,6 +410,13 @@
                 localStorage.removeItem('webdesk_username');
                 localStorage.removeItem('webdesk_role');
             }
+
+            // Display notification if logged out due to new session in another browser
+            const params = new URLSearchParams(window.location.search);
+            const reason = params.get('reason') || params.get('msg');
+            if (reason) {
+                showAlert(reason, false);
+            }
         });
     </script>
 </body>

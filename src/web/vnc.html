@@ -769,8 +769,15 @@
                             headers: { 'Authorization': `Bearer ${this.token}` }
                         });
                         if (hRes.status === 401) {
-                            // User was kicked or suspended
-                            this.logout('Session terminated by administrator.');
+                            // User was kicked, suspended, or superseded by new login on another browser
+                            let reasonMsg = 'Your account was logged in from another session.';
+                            try {
+                                const hData = await hRes.json();
+                                if (hData && hData.error) {
+                                    reasonMsg = hData.error;
+                                }
+                            } catch(e) {}
+                            this.logout(reasonMsg);
                             return;
                         }
                         const res = await apiFetch('/api/auth/viewers', {
@@ -789,7 +796,7 @@
                 };
 
                 sendHeartbeat();
-                setInterval(sendHeartbeat, 5000);
+                setInterval(sendHeartbeat, 2000);
             },
 
             openPasswordModal(targetUser) {
@@ -1121,12 +1128,12 @@
                     } catch(e) {}
                 }
 
+                // 6. Hard redirect to login.html with reason in URL query param
+                let targetUrl = 'login.html';
                 if (reason) {
-                    alert(reason);
+                    targetUrl += '?reason=' + encodeURIComponent(reason);
                 }
-
-                // 6. Hard redirect to login.html
-                window.location.replace('login.html');
+                window.location.replace(targetUrl);
             }
         };
 

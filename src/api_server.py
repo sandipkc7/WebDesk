@@ -282,10 +282,19 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
 
         # 3. Logout endpoint
         if path in ["/api/auth/logout", "/api/logout"]:
-            user, err = self.get_token_user()
-            if user:
-                ACTIVE_VIEWERS.pop(user["username"], None)
-                user_auth.terminate_user_session(user["username"], user["username"])
+            auth_header = self.headers.get("Authorization", "")
+            token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else ""
+            if token and "." in token:
+                try:
+                    payload_bytes = bytes.fromhex(token.split(".", 1)[0])
+                    payload = json.loads(payload_bytes.decode("utf-8"))
+                    uname = payload.get("sub", "")
+                    nonce = payload.get("nonce", "")
+                    if uname:
+                        ACTIVE_VIEWERS.pop(uname, None)
+                        user_auth.clear_active_session(uname, nonce)
+                except Exception:
+                    pass
             self.send_json(200, {"ok": True, "success": True, "message": "Logged out successfully."})
             return
 

@@ -33,10 +33,77 @@ INSTALL_DIR = get_install_dir()
 USERS_FILE = os.path.join(INSTALL_DIR, "users.json")
 SECRET_KEY_FILE = os.path.join(INSTALL_DIR, "secret.key")
 REVOKED_TOKENS_FILE = os.path.join(INSTALL_DIR, "revoked_tokens.json")
+ACTIVE_SESSIONS_FILE = os.path.join(INSTALL_DIR, "active_sessions.json")
 CONFIG_FILE = os.path.join(INSTALL_DIR, "config.env")
 THEME_FILE = os.path.join(INSTALL_DIR, "theme_pref.json")
 
 PBKDF2_ITERATIONS = 100000
+
+
+def load_active_sessions() -> dict:
+    """Loads active session nonces per user."""
+    ensure_initialized()
+    if os.path.exists(ACTIVE_SESSIONS_FILE):
+        try:
+            with open(ACTIVE_SESSIONS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {}
+
+
+def save_active_sessions(sessions: dict) -> bool:
+    """Atomically writes active sessions to active_sessions.json with 0600 permissions."""
+    os.makedirs(INSTALL_DIR, exist_ok=True)
+    tmp_file = ACTIVE_SESSIONS_FILE + ".tmp"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(sessions, f, indent=2)
+        os.chmod(tmp_file, 0o600)
+        os.replace(tmp_file, ACTIVE_SESSIONS_FILE)
+        return True
+    except Exception:
+        if os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except Exception:
+                pass
+        return False
+
+
+def record_active_session(username: str, nonce: str, iat: int):
+    """Registers a new active session for a user, superseding any prior sessions."""
+    sessions = load_active_sessions()
+    sessions[username] = {
+        "nonce": nonce,
+        "iat": iat,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    }
+    save_active_sessions(sessions)
+
+
+def is_session_active(username: str, nonce: str) -> tuple:
+    """Checks if the given session nonce is the single active session for the user."""
+    sessions = load_active_sessions()
+    user_sess = sessions.get(username)
+    if not user_sess:
+        # If no active session recorded yet, allow it
+        return True, None
+    current_nonce = user_sess.get("nonce")
+    if current_nonce and current_nonce != nonce:
+        return False, "Your account was logged in from another session."
+    return True, None
+
+
+def clear_active_session(username: str, nonce: str = None):
+    """Clears active session registration for user upon explicit logout or termination."""
+    sessions = load_active_sessions()
+    if username in sessions:
+        if nonce is None or sessions[username].get("nonce") == nonce:
+            del sessions[username]
+            save_active_sessions(sessions)
 
 
 def get_secret_key() -> bytes:
@@ -365,9 +432,10 @@ def reset_default_users() -> tuple:
 
 
 def terminate_user_session(caller_user: str, target_uname: str) -> tuple:
-    """Terminates active session by logging revocation timestamp."""
+    """Terminates active session by logging revocation timestamp and clearing active session."""
     target_uname = (target_uname or "").strip()
     ensure_initialized()
+    clear_active_session(target_uname)
     try:
         rev_data = {"revoked_tokens": [], "revoked_users": {}}
         if os.path.exists(REVOKED_TOKENS_FILE):
@@ -504,11 +572,14 @@ def authenticate(username: str, password: str) -> tuple:
 
 
 def create_token(username: str, expiry_hours: int = 48) -> str:
-    """Generates an HMAC-SHA256 signed session token."""
+    """Generates an HMAC-SHA256 signed session token and registers it as the active session."""
     key = get_secret_key()
     iat = int(time.time())
     exp = iat + (expiry_hours * 3600)
     nonce = secrets.token_hex(8)
+
+    # Register as the current active session for this user (invalidating prior sessions)
+    record_active_session(username, nonce, iat)
 
     payload_dict = {
         "sub": username,
@@ -524,7 +595,7 @@ def create_token(username: str, expiry_hours: int = 48) -> str:
 
 
 def verify_token(token: str) -> tuple:
-    """Verifies HMAC-SHA256 signed token and checks revocation/status."""
+    """Verifies HMAC-SHA256 signed token and checks revocation, suspension, and single active session."""
     if not token or "." not in token:
         return False, "Malformed session token."
 
@@ -540,11 +611,12 @@ def verify_token(token: str) -> tuple:
         exp = payload.get("exp", 0)
         iat = payload.get("iat", 0)
         username = payload.get("sub", "")
+        nonce = payload.get("nonce", "")
 
         if time.time() > exp:
             return False, "Session token has expired."
 
-        # Check revocation
+        # Check explicit revocation list
         if os.path.exists(REVOKED_TOKENS_FILE):
             try:
                 with open(REVOKED_TOKENS_FILE, "r", encoding="utf-8") as f:
@@ -554,6 +626,12 @@ def verify_token(token: str) -> tuple:
                         return False, "Session token was terminated."
             except Exception:
                 pass
+
+        # Check single active session enforcement (disable concurrent sessions for same user)
+        if nonce:
+            is_active, sess_err = is_session_active(username, nonce)
+            if not is_active:
+                return False, sess_err or "Your account was logged in from another session."
 
         user = get_user(username)
         if not user:
