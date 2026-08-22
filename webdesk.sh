@@ -5,25 +5,23 @@
 # Supports: Live Desktop, Login Screen (LightDM), Fullscreen & Mobile
 # ==============================================================================
 
-set -eo pipefail
-
 APP_NAME="WebDesk"
 VERSION="2.3.1"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}" 2>/dev/null || echo "webdesk.sh")"
 SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_NAME}"
 
 # Resolve real user and installation directory (works for current user, sudo, and systemd service)
 SCRIPT_OWNER=$(stat -c '%U' "${SCRIPT_PATH}" 2>/dev/null || echo "")
-if [ -n "${SUDO_USER}" ]; then
+if [ -n "${SUDO_USER:-}" ]; then
     REAL_USER="${SUDO_USER}"
-elif [ "${USER}" = "root" ] && [ -n "${SCRIPT_OWNER}" ] && [ "${SCRIPT_OWNER}" != "root" ]; then
+elif [ "${USER:-}" = "root" ] && [ -n "${SCRIPT_OWNER}" ] && [ "${SCRIPT_OWNER}" != "root" ]; then
     REAL_USER="${SCRIPT_OWNER}"
 else
-    REAL_USER="${USER:-$SCRIPT_OWNER}"
+    REAL_USER="${USER:-${SCRIPT_OWNER:-root}}"
 fi
 [ -z "${REAL_USER}" ] && REAL_USER="root"
-USER_HOME=$(getent passwd "${REAL_USER}" 2>/dev/null | cut -d: -f6 || echo "${HOME}")
+USER_HOME=$(getent passwd "${REAL_USER}" 2>/dev/null | cut -d: -f6 || echo "${HOME:-/root}")
 INSTALL_DIR="${USER_HOME}/.local/share/webdesk"
 
 VNC_ROOT="${INSTALL_DIR}/root"
@@ -46,8 +44,8 @@ if [ -f "${CONFIG_FILE}" ]; then
     # shellcheck disable=SC1090
     source "${CONFIG_FILE}" 2>/dev/null || true
 else
-    mkdir -p "${INSTALL_DIR}"
-    echo "PROFILE=${DEFAULT_PROFILE}" > "${CONFIG_FILE}"
+    mkdir -p "${INSTALL_DIR}" 2>/dev/null || true
+    echo "PROFILE=${DEFAULT_PROFILE}" > "${CONFIG_FILE}" 2>/dev/null || true
     PROFILE="${DEFAULT_PROFILE}"
 fi
 
@@ -57,10 +55,13 @@ RDP_ENABLED="${RDP_ENABLED:-false}"
 RDP_DESKTOP="${RDP_DESKTOP:-auto}"
 
 # Multiarch dynamic library resolution (amd64, arm64 / aarch64, armhf, etc.)
-MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//')
-export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
-export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
-export PATH="${VNC_ROOT}/usr/bin:${PATH}"
+MULTIARCH_DIRS=""
+if [ -d "${VNC_ROOT}/usr/lib" ]; then
+    MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//' || true)
+fi
+export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH:-}"
+export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH:-}"
+export PATH="${VNC_ROOT}/usr/bin:${PATH:-}"
 export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
 
 # Terminal Colors
