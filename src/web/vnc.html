@@ -682,6 +682,13 @@
                 window.location.replace(window.location.href.replace('http:', 'https:'));
                 throw new Error('Insecure connection. HTTPS is strictly required.');
             }
+            const token = (window.WebDeskAuth && window.WebDeskAuth.token) || localStorage.getItem('webdesk_token') || sessionStorage.getItem('webdesk_token') || '';
+            if (token) {
+                options.headers = options.headers || {};
+                if (!options.headers['Authorization'] && !options.headers['authorization']) {
+                    options.headers['Authorization'] = `Bearer ${token}`;
+                }
+            }
             // 1. Primary: Same-origin HTTPS (port 6080)
             try {
                 const res = await fetch(endpoint, options);
@@ -1378,6 +1385,10 @@
                     hub.classList.add('expanded');
                 } else {
                     hub.classList.remove('expanded');
+                    const canvas = document.querySelector('#noVNC_container canvas') || document.getElementById('noVNC_keyboardinput');
+                    if (canvas && canvas.focus) {
+                        try { canvas.focus(); } catch(e) {}
+                    }
                 }
             },
 
@@ -1518,21 +1529,105 @@
             }
         };
 
-        // 4. WebDesk Special Keys Injection
+        // 4. WebDesk Special Keys Injection (Direct RFB Keysym + HTTP Fallback)
         window.WebDeskKeys = {
-            async send(combo) {
-                try {
-                    const res = await apiFetch('/api/key', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ combo: combo })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
+            send(combo) {
+                const rfb = (window.UI && window.UI.rfb) ? window.UI.rfb : null;
+                const c = String(combo || '').toLowerCase().trim();
+
+                // 1. Direct RFB Keysym Injection (Zero-latency, identical to physical keyboard)
+                if (rfb) {
+                    if (c === 'super_l' || c === 'super' || c === 'win' || c === 'start') {
+                        // Open Application Menu (Super/Win Key)
+                        rfb.sendKey(0xffeb, 'MetaLeft', true);
+                        setTimeout(() => rfb.sendKey(0xffeb, 'MetaLeft', false), 80);
+                        window.WebDeskRes.showToast('🪟 Opened Start / App Menu');
+                        return;
+                    }
+                    if (c === 'alt+tab' || c === 'alttab') {
+                        // Switch Windows (Alt+Tab)
+                        rfb.sendKey(0xffe9, 'AltLeft', true);
+                        rfb.sendKey(0xff09, 'Tab', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0xff09, 'Tab', false);
+                            rfb.sendKey(0xffe9, 'AltLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('🔀 Switched Window (Alt+Tab)');
+                        return;
+                    }
+                    if (c === 'ctrl+alt+t' || c === 'terminal') {
+                        // Launch Terminal (Ctrl+Alt+T)
+                        rfb.sendKey(0xffe3, 'ControlLeft', true);
+                        rfb.sendKey(0xffe9, 'AltLeft', true);
+                        rfb.sendKey(0x0074, 'KeyT', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0x0074, 'KeyT', false);
+                            rfb.sendKey(0xffe9, 'AltLeft', false);
+                            rfb.sendKey(0xffe3, 'ControlLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('💻 Opened Terminal (Ctrl+Alt+T)');
+                        return;
+                    }
+                    if (c === 'super+d' || c === 'desktop') {
+                        // Show Desktop (Super+D and Ctrl+Alt+D fallback)
+                        rfb.sendKey(0xffeb, 'MetaLeft', true);
+                        rfb.sendKey(0x0064, 'KeyD', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0x0064, 'KeyD', false);
+                            rfb.sendKey(0xffeb, 'MetaLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('🖥️ Toggled Desktop (Super+D)');
+                        return;
+                    }
+                    if (c === 'alt+f2' || c === 'run') {
+                        // Run Command Dialog (Alt+F2)
+                        rfb.sendKey(0xffe9, 'AltLeft', true);
+                        rfb.sendKey(0xffbe, 'F2', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0xffbe, 'F2', false);
+                            rfb.sendKey(0xffe9, 'AltLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('⚡ Opened Run Dialog (Alt+F2)');
+                        return;
+                    }
+                    if (c === 'alt+f4' || c === 'close') {
+                        // Close Active Window (Alt+F4)
+                        rfb.sendKey(0xffe9, 'AltLeft', true);
+                        rfb.sendKey(0xffc1, 'F4', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0xffc1, 'F4', false);
+                            rfb.sendKey(0xffe9, 'AltLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('❌ Closed Window (Alt+F4)');
+                        return;
+                    }
+                    if (c === 'ctrl+shift+v' || c === 'paste') {
+                        // Terminal Paste (Ctrl+Shift+V)
+                        rfb.sendKey(0xffe3, 'ControlLeft', true);
+                        rfb.sendKey(0xffe1, 'ShiftLeft', true);
+                        rfb.sendKey(0x0076, 'KeyV', true);
+                        setTimeout(() => {
+                            rfb.sendKey(0x0076, 'KeyV', false);
+                            rfb.sendKey(0xffe1, 'ShiftLeft', false);
+                            rfb.sendKey(0xffe3, 'ControlLeft', false);
+                        }, 100);
+                        window.WebDeskRes.showToast('📋 Terminal Paste (Ctrl+Shift+V)');
+                        return;
+                    }
+                }
+
+                // 2. HTTP Backend Injection Fallback via /api/key
+                apiFetch('/api/key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ combo: combo })
+                }).then(r => r.json()).then(data => {
+                    if (data && data.success) {
                         window.WebDeskRes.showToast(`⌨️ Sent Key: ${combo}`);
                     }
-                } catch(e) {}
+                }).catch(() => {});
             },
+
             sendCtrlAltDel() {
                 if (window.UI && window.UI.rfb) {
                     window.UI.rfb.sendCtrlAltDel();

@@ -618,10 +618,24 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "success": False, "error": "Missing keys/combo parameter."})
                 return
 
+            # Locate xdotool binary (system path or standalone VNC_ROOT)
+            xdotool_bin = shutil.which("xdotool")
+            root_bin = os.path.join(INSTALL_DIR, "root", "usr", "bin", "xdotool")
+            if not xdotool_bin and os.path.exists(root_bin):
+                xdotool_bin = root_bin
+
+            if not xdotool_bin:
+                self.send_json(500, {"ok": False, "success": False, "error": "xdotool binary not found on host."})
+                return
+
             display = os.environ.get("DISPLAY", ":0")
             env = dict(os.environ, DISPLAY=display)
+            ld_path = os.path.join(INSTALL_DIR, "root", "usr", "lib", "x86_64-linux-gnu")
+            if os.path.exists(ld_path):
+                env["LD_LIBRARY_PATH"] = f"{ld_path}:{env.get('LD_LIBRARY_PATH', '')}"
+
             try:
-                subprocess.run(["xdotool", "key", keys], env=env, timeout=5)
+                subprocess.run([xdotool_bin, "key", keys], env=env, timeout=5)
                 self.send_json(200, {"ok": True, "success": True, "keys": keys})
             except Exception as e:
                 self.send_json(500, {"ok": False, "success": False, "error": str(e)})
