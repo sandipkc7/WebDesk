@@ -413,7 +413,41 @@
             }
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        async function approveCertPopup() {
+            const certUrl = `https://${API_HOST}:${API_PORT}/api/status`;
+            const win = window.open(certUrl, 'webdesk_cert', 'width=600,height=500');
+            if (win) {
+                const checkInterval = setInterval(async () => {
+                    try {
+                        const res = await fetch(certUrl);
+                        if (res.ok) {
+                            clearInterval(checkInterval);
+                            try { win.close(); } catch(e) {}
+                            hideAlert();
+                            showAlert('✔ Certificate approved! Signing in...', true);
+                            setTimeout(() => {
+                                const form = document.getElementById('login_form');
+                                if (form) handleLogin(new Event('submit'));
+                            }, 500);
+                        }
+                    } catch(e) {}
+                }, 1000);
+            } else {
+                window.location.href = certUrl;
+            }
+        }
+
+        async function checkApiCert() {
+            try {
+                const res = await fetch(`https://${API_HOST}:${API_PORT}/api/status`, { mode: 'cors' });
+                if (res.ok) return true;
+            } catch (e) {
+                return false;
+            }
+            return false;
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
             if (window.location.protocol === 'http:') {
                 window.location.replace(window.location.href.replace('http:', 'https:'));
                 return;
@@ -431,6 +465,23 @@
             const reason = params.get('reason') || params.get('msg');
             if (reason) {
                 showAlert(reason, false);
+            }
+
+            // Proactive background SSL check
+            const certOk = await checkApiCert();
+            if (!certOk) {
+                const alertEl = document.getElementById('login_alert');
+                alertEl.className = 'alert-box alert-error';
+                alertEl.style.display = 'block';
+                alertEl.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 4px;">🔒 First-Time HTTPS Approval Required</div>
+                    <div style="font-size: 12px; margin-bottom: 8px; opacity: 0.9;">
+                        Click below to accept the backend SSL certificate for this server:
+                    </div>
+                    <button type="button" onclick="approveCertPopup()" style="width:100%; background: #3b82f6; color: #fff; border:none; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer;">
+                        👉 One-Click Certificate Approval
+                    </button>
+                `;
             }
         });
     </script>
