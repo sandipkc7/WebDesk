@@ -115,31 +115,31 @@ ensure_runtime_files() {
     if [ -d "${VNC_ROOT}/usr/share/novnc" ]; then
         # vnc.html & index.html
         if [ -f "${SCRIPT_DIR}/src/web/vnc.html" ]; then
-            cp -u "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
-            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         elif [ -f "${SCRIPT_DIR}/vnc.html" ]; then
-            cp -u "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || cp "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
-            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         elif [ ! -f "${VNC_ROOT}/usr/share/novnc/vnc.html" ] || ! grep -q "webdesk_hub" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null; then
             curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/vnc.html" -o "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
-            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+            cp -f "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         fi
 
         # login.html
         if [ -f "${SCRIPT_DIR}/src/web/login.html" ]; then
-            cp -u "${SCRIPT_DIR}/src/web/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/src/web/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
         elif [ -f "${SCRIPT_DIR}/login.html" ]; then
-            cp -u "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || cp "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
-        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/login.html" ]; then
+            cp -f "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+        else
             curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/login.html" -o "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
         fi
 
         # webdesk.css
         if [ -f "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" ]; then
-            cp -u "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+            cp -f "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
         elif [ -f "${SCRIPT_DIR}/app/styles/webdesk.css" ]; then
-            cp -u "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || cp "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
-        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" ]; then
+            cp -f "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+        else
             curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/app/styles/webdesk.css" -o "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
         fi
     fi
