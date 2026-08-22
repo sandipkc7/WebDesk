@@ -251,9 +251,11 @@ install_webdesk() {
     mkdir -p "${USER_HOME}/.local/bin"
     ln -sf "${INSTALL_DIR}/webdesk.sh" "${USER_HOME}/.local/bin/webdesk"
 
-    # Create system-wide symlink if writable
+    # Create system-wide symlink into /usr/local/bin (available immediately in PATH)
     if [ -w "/usr/local/bin" ] || [ "$EUID" -eq 0 ]; then
         ln -sf "${INSTALL_DIR}/webdesk.sh" "/usr/local/bin/webdesk" 2>/dev/null || true
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo ln -sf "${INSTALL_DIR}/webdesk.sh" "/usr/local/bin/webdesk" 2>/dev/null || true
     fi
 
     # Ensure ~/.local/bin is in PATH for shell profiles
@@ -332,9 +334,18 @@ user_auth.reset_master_password_to_rule()
     fi
 
     echo -e "${GREEN}${BOLD}✔ [WebDesk] Installation completed successfully!${NC}\n"
-    echo -e "To use WebDesk in this current terminal window, run:"
-    echo -e "  👉 ${CYAN}${BOLD}source ~/.bashrc${NC}\n"
-    echo -e "Then start WebDesk using:"
+    echo -e "WebDesk is ready to use via the '${CYAN}${BOLD}webdesk${NC}' command.\n"
+
+    if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
+        read -rp "Would you like to start WebDesk and open the Interactive Menu now? (Y/n): " start_now </dev/tty 2>/dev/null || start_now="y"
+        if [[ ! "$start_now" =~ ^[nN]$ ]]; then
+            start_webdesk
+            interactive_menu
+            return 0
+        fi
+    fi
+
+    echo -e "You can start WebDesk anytime by running:"
     echo -e "  👉 ${CYAN}${BOLD}webdesk start${NC}  ${DIM}(or '${CYAN}webdesk${NC}${DIM}' for interactive menu)${NC}\n"
 }
 
@@ -2172,15 +2183,23 @@ show_healthcheck() {
     fi
 
     local p_vnc p_ws p_api p_audio
-    p_vnc=$(pgrep -f "x11vnc.*${VNC_PORT}" 2>/dev/null || true)
-    p_ws=$(pgrep -f "websockify.*${WEB_PORT}" 2>/dev/null || true)
-    p_api=$(pgrep -f "api_server.py.*${RES_PORT}" 2>/dev/null || true)
-    p_audio=$(pgrep -f "audio_server.py.*${AUDIO_PORT}" 2>/dev/null || true)
+    p_vnc=$(pgrep -f "x11vnc" | head -n 1 2>/dev/null || true)
+    p_ws=$(pgrep -f "websockify.*${WEB_PORT}" | head -n 1 2>/dev/null || pgrep -f "websockify" | head -n 1 2>/dev/null || true)
+    p_api=$(pgrep -f "api_server.py" | head -n 1 2>/dev/null || true)
+    p_audio=$(pgrep -f "audio_server.py" | head -n 1 2>/dev/null || true)
 
-    [ -n "$p_vnc" ] && echo -e "  • x11vnc (Port ${VNC_PORT})     : ${GREEN}● Listening (PID: ${p_vnc})${NC}" || echo -e "  • x11vnc (Port ${VNC_PORT})     : ${RED}○ Not Running${NC}"
-    [ -n "$p_ws" ] && echo -e "  • websockify (Port ${WEB_PORT}) : ${GREEN}● Listening (PID: ${p_ws})${NC}" || echo -e "  • websockify (Port ${WEB_PORT}) : ${RED}○ Not Running${NC}"
-    [ -n "$p_api" ] && echo -e "  • API Server (Port ${RES_PORT}) : ${GREEN}● Listening (PID: ${p_api})${NC}" || echo -e "  • API Server (Port ${RES_PORT}) : ${RED}○ Not Running${NC}"
-    [ -n "$p_audio" ] && echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${GREEN}● Listening (PID: ${p_audio})${NC}" || echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${RED}○ Not Running${NC}"
+    # Check port bindings directly if ss is available
+    if command -v ss >/dev/null 2>&1; then
+        [ -z "$p_vnc" ] && ss -tlnp 2>/dev/null | grep -q ":${VNC_PORT} " && p_vnc="Active"
+        [ -z "$p_ws" ] && ss -tlnp 2>/dev/null | grep -q ":${WEB_PORT} " && p_ws="Active"
+        [ -z "$p_api" ] && ss -tlnp 2>/dev/null | grep -q ":${RES_PORT} " && p_api="Active"
+        [ -z "$p_audio" ] && ss -tlnp 2>/dev/null | grep -q ":${AUDIO_PORT} " && p_audio="Active"
+    fi
+
+    [ -n "$p_vnc" ] && echo -e "  • x11vnc (Port ${VNC_PORT})     : ${GREEN}● Listening (PID/Status: ${p_vnc})${NC}" || echo -e "  • x11vnc (Port ${VNC_PORT})     : ${RED}○ Not Running${NC}"
+    [ -n "$p_ws" ] && echo -e "  • websockify (Port ${WEB_PORT}) : ${GREEN}● Listening (PID/Status: ${p_ws})${NC}" || echo -e "  • websockify (Port ${WEB_PORT}) : ${RED}○ Not Running${NC}"
+    [ -n "$p_api" ] && echo -e "  • API Server (Port ${RES_PORT}) : ${GREEN}● Listening (PID/Status: ${p_api})${NC}" || echo -e "  • API Server (Port ${RES_PORT}) : ${RED}○ Not Running${NC}"
+    [ -n "$p_audio" ] && echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${GREEN}● Listening (PID/Status: ${p_audio})${NC}" || echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${RED}○ Not Running${NC}"
 
     if is_rdp_active; then
         echo -e "  • XRDP Server (Port ${RDP_PORT}) : ${GREEN}● Listening${NC}"
