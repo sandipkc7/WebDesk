@@ -331,7 +331,8 @@ user_auth.reset_master_password_to_rule()
     fi
 
     echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}"
-    echo -e "You can now run '${CYAN}${BOLD}webdesk${NC}' or '${CYAN}${BOLD}webdesk start${NC}' from anywhere in your terminal.\n"
+    echo -e "You can now run '${CYAN}${BOLD}webdesk${NC}' or '${CYAN}${BOLD}webdesk start${NC}'."
+    echo -e "${DIM}(If 'webdesk' is not recognized in your current shell, run: ${BOLD}source ~/.bashrc${NC}${DIM} or open a new terminal)${NC}\n"
 }
 
 remove_webdesk() {
