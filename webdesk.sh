@@ -1318,7 +1318,7 @@ apply_rdp_config() {
 
     echo -e "${YELLOW}Configuring XRDP server for Mode ${mode} on port ${port}...${NC}"
 
-    sudo python3 -c "
+    local cmd="
 import re, sys
 
 ini_path = '/etc/xrdp/xrdp.ini'
@@ -1332,24 +1332,56 @@ try:
     # Update port
     content = re.sub(r'^port=\d+', f'port={port}', content, flags=re.MULTILINE)
 
+    # Trim legacy sections after [Channels]
+    channels_idx = content.find('[Channels]')
+    if channels_idx != -1:
+        next_sec = re.search(r'\n\[(Live-Desktop-Mirror|Xorg|Xvnc|vnc-any|neutrinordp-any)\]', content[channels_idx:])
+        if next_sec:
+            base_content = content[:channels_idx + next_sec.start() + 1]
+        else:
+            base_content = content
+    else:
+        base_content = content
+
     mirror_block = '''[Live-Desktop-Mirror]
 name=Live Desktop Mirror (:0)
 lib=libvnc.so
 ip=127.0.0.1
 port=5900
-username=na
+username=ask
 password=ask
+pamusername=asksame
+pampassword=asksame
+pamsessionmng=127.0.0.1
+'''
+
+    xorg_block = '''[Xorg]
+name=Xorg Virtual Session
+lib=libxup.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+code=20
 '''
 
     if mode == '1':
-        if '[Live-Desktop-Mirror]' not in content:
-            content = content.replace('[Xorg]', mirror_block + '\n[Xorg]')
+        sections = mirror_block + '\n' + xorg_block
+    else:
+        sections = xorg_block + '\n' + mirror_block
+
+    final_content = base_content.rstrip() + '\n\n' + sections + '\n'
 
     with open(ini_path, 'w') as f:
-        f.write(content)
+        f.write(final_content)
 except Exception as e:
     print(f'Error updating xrdp.ini: {e}', file=sys.stderr)
-" 2>/dev/null || true
+"
+    if [ "$EUID" -eq 0 ]; then
+        python3 -c "$cmd" 2>/dev/null || true
+    else
+        sudo python3 -c "$cmd" 2>/dev/null || true
+    fi
 
     RDP_MODE="${mode}"
     RDP_PORT="${port}"
