@@ -333,13 +333,28 @@ user_auth.reset_master_password_to_rule()
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
     fi
 
+    # Automatically install and enable 24/7 background system service
+    if ! is_service_installed; then
+        echo -e "${YELLOW}--> Setting up 24/7 background streaming service...${NC}"
+        if [ "$EUID" -eq 0 ]; then
+            install_system_service >/dev/null 2>&1 || true
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo "${INSTALL_DIR}/webdesk.sh" install-service >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Start the server if not already running
+    if ! is_running; then
+        echo -e "${YELLOW}--> Starting WebDesk Server...${NC}"
+        start_webdesk
+    fi
+
     echo -e "${GREEN}${BOLD}✔ [WebDesk] Installation completed successfully!${NC}\n"
-    echo -e "WebDesk is ready to use via the '${CYAN}${BOLD}webdesk${NC}' command.\n"
+    echo -e "WebDesk is running and ready to use via the '${CYAN}${BOLD}webdesk${NC}' command.\n"
 
     if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
-        read -rp "Would you like to start WebDesk and open the Interactive Menu now? (Y/n): " start_now </dev/tty 2>/dev/null || start_now="y"
+        read -rp "Would you like to open the Interactive Menu now? (Y/n): " start_now </dev/tty 2>/dev/null || start_now="y"
         if [[ ! "$start_now" =~ ^[nN]$ ]]; then
-            start_webdesk
             interactive_menu
             return 0
         fi
