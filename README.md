@@ -14,6 +14,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/w
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
 ```
+> 💡 **Tip**: After installation, run `source ~/.bashrc` (or open a new terminal window) to enable the `webdesk` CLI in your current shell.
 
 ### 🌐 Accessing Your Linux Desktop
 

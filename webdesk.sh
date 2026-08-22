@@ -257,13 +257,11 @@ install_webdesk() {
     fi
 
     # Ensure ~/.local/bin is in PATH for shell profiles
-    if [[ ":$PATH:" != *":${USER_HOME}/.local/bin:"* ]]; then
-        for rc in "${USER_HOME}/.bashrc" "${USER_HOME}/.profile" "${USER_HOME}/.zshrc"; do
-            if [ -f "$rc" ] && ! grep -q 'export PATH=.*\.local/bin' "$rc" 2>/dev/null; then
-                echo -e '\n# Added by WebDesk\nexport PATH="$HOME/.local/bin:$PATH"' >> "$rc"
-            fi
-        done
-    fi
+    for rc in "${USER_HOME}/.bashrc" "${USER_HOME}/.profile" "${USER_HOME}/.zshrc" "${USER_HOME}/.bash_profile"; do
+        if [ -f "$rc" ] && ! grep -q '\.local/bin' "$rc" 2>/dev/null; then
+            echo -e '\n# Added by WebDesk\nexport PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+        fi
+    done
 
     ensure_runtime_files
     generate_ssl_cert
@@ -330,9 +328,11 @@ user_auth.reset_master_password_to_rule()
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
     fi
 
-    echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}"
-    echo -e "You can now run '${CYAN}${BOLD}webdesk${NC}' or '${CYAN}${BOLD}webdesk start${NC}'."
-    echo -e "${DIM}(If 'webdesk' is not recognized in your current shell, run: ${BOLD}source ~/.bashrc${NC}${DIM} or open a new terminal)${NC}\n"
+    echo -e "${GREEN}${BOLD}✔ [WebDesk] Installation completed successfully!${NC}\n"
+    echo -e "To use WebDesk in this current terminal window, run:"
+    echo -e "  👉 ${CYAN}${BOLD}source ~/.bashrc${NC}\n"
+    echo -e "Then start WebDesk using:"
+    echo -e "  👉 ${CYAN}${BOLD}webdesk start${NC}  ${DIM}(or '${CYAN}webdesk${NC}${DIM}' for interactive menu)${NC}\n"
 }
 
 remove_webdesk() {
