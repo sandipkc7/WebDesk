@@ -93,7 +93,7 @@ def is_session_active(username: str, nonce: str) -> tuple:
         return True, None
     current_nonce = user_sess.get("nonce")
     if current_nonce and current_nonce != nonce:
-        return False, "Your account was logged in from another session."
+        return False, "A new session was started for your account on another browser. You have been logged out."
     return True, None
 
 

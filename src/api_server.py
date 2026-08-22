@@ -143,7 +143,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         if path in ["/api/auth/me", "/api/me"]:
             user, err = self.get_token_user()
             if not user:
-                self.send_json(401, {"ok": False, "success": False, "error": err})
+                self.send_json(401, {"ok": False, "success": False, "error": err, "code": "SESSION_SUPERSEDED"})
                 return
             ACTIVE_VIEWERS[user["username"]] = (time.time(), user.get("role", "user"))
             self.send_json(200, {
@@ -157,8 +157,22 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             })
             return
 
+        # Heartbeat check
+        if path in ["/api/auth/heartbeat", "/api/heartbeat"]:
+            user, err = self.get_token_user()
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err, "code": "SESSION_SUPERSEDED"})
+                return
+            ACTIVE_VIEWERS[user["username"]] = (time.time(), user.get("role", "user"))
+            self.send_json(200, {"ok": True, "success": True, "status": "active"})
+            return
+
         # Connected viewers count and list
         if path in ["/api/auth/viewers", "/api/viewers"]:
+            user, err = self.get_token_user()
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err, "code": "SESSION_SUPERSEDED"})
+                return
             viewers = get_active_viewers_list()
             self.send_json(200, {
                 "ok": True,
@@ -274,7 +288,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         if path in ["/api/auth/heartbeat", "/api/heartbeat"]:
             user, err = self.get_token_user()
             if not user:
-                self.send_json(401, {"ok": False, "success": False, "error": err})
+                self.send_json(401, {"ok": False, "success": False, "error": err, "code": "SESSION_SUPERSEDED"})
                 return
             ACTIVE_VIEWERS[user["username"]] = (time.time(), user.get("role", "user"))
             self.send_json(200, {"ok": True, "success": True, "status": "active"})
