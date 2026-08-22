@@ -257,12 +257,12 @@ user_auth.reset_master_password_to_rule()
             fi
             python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 import user_auth
-user_auth.set_custom_master_password('${init_pw}')
-" 2>/dev/null || true
+user_auth.set_custom_master_password(sys.argv[3])
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${init_pw}" 2>/dev/null || true
             echo -e "${GREEN}✔ Custom Master Password saved successfully.${NC}\n"
             break
         done
@@ -821,16 +821,16 @@ except Exception as e:
                 if [ "$new_urole" = "3" ]; then ROLE_STR="viewer"; fi
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.add_user('admin', '${new_uname}', '${new_upass}', '${ROLE_STR}')
+    ok, msg = user_auth.add_user('admin', sys.argv[3], sys.argv[4], sys.argv[5])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${new_uname}" "${new_upass}" "${ROLE_STR}" 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
             3)
@@ -840,16 +840,16 @@ except Exception as e:
                 echo ""
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.change_password('admin', 'admin', '${target_uname}', '${target_upass}')
+    ok, msg = user_auth.change_password('admin', 'admin', sys.argv[3], sys.argv[4])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${target_uname}" "${target_upass}" 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
             4)
@@ -859,19 +859,19 @@ except Exception as e:
                 read -rp "Select action [1-2]: " susp_act </dev/tty || true
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    if '${susp_act}' == '1':
-        ok, msg = user_auth.suspend_user('admin', '${susp_uname}')
+    if sys.argv[3] == '1':
+        ok, msg = user_auth.suspend_user('admin', sys.argv[4])
     else:
-        ok, msg = user_auth.unsuspend_user('admin', '${susp_uname}')
+        ok, msg = user_auth.unsuspend_user('admin', sys.argv[4])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${susp_act}" "${susp_uname}" 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
             5)
@@ -879,16 +879,16 @@ except Exception as e:
                 read -rp "Enter username to disconnect: " kick_uname </dev/tty || true
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.terminate_user_session('admin', '${kick_uname}')
+    ok, msg = user_auth.terminate_user_session('admin', sys.argv[3])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${kick_uname}" 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
             6)
@@ -896,16 +896,16 @@ except Exception as e:
                 read -rp "Enter username to delete: " del_uname </dev/tty || true
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.delete_user('admin', '', '${del_uname}')
+    ok, msg = user_auth.delete_user('admin', '', sys.argv[3])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${del_uname}" 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
             0|*)
@@ -1052,16 +1052,16 @@ except Exception:
 
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.set_custom_master_password('${new_mp}')
+    ok, msg = user_auth.set_custom_master_password(sys.argv[3])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${new_mp}" 2>&1 || true
                 pause_prompt "Press Enter to continue..."
                 ;;
             2)
@@ -1187,16 +1187,16 @@ except Exception as e:
                 exp_dest="${exp_dest:-$default_exp}"
                 python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg, _ = user_auth.export_config('${exp_dest}')
+    ok, msg, _ = user_auth.export_config(sys.argv[3])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${exp_dest}" 2>&1 || true
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
             7)
@@ -1205,16 +1205,16 @@ except Exception as e:
                 if [ -n "$imp_src" ]; then
                     python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, msg = user_auth.import_config('${imp_src}')
+    ok, msg = user_auth.import_config(sys.argv[3])
     print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
-" 2>&1 || true
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${imp_src}" 2>&1 || true
                 else
                     echo -e "\n${CYAN}Import cancelled.${NC}"
                 fi
@@ -1313,16 +1313,16 @@ except Exception:
     local auth_result
     auth_result=$(python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}/src')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
 try:
     import user_auth
-    ok, mode_or_err = user_auth.verify_master_password('''${input_pw}''')
+    ok, mode_or_err = user_auth.verify_master_password(sys.argv[3])
     print('OK' if ok else 'FAIL')
 except Exception:
     print('FAIL')
-" 2>/dev/null || echo "FAIL")
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${input_pw}" 2>/dev/null || echo "FAIL")
 
     if [ "$auth_result" != "OK" ]; then
         echo -e "\n  ${RED}${BOLD}✖ Access Denied: Incorrect Master Password.${NC}\n"
@@ -1638,13 +1638,13 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2])
 import user_auth
-target = '${2:-}' or None
+target = sys.argv[3] or None
 ok, msg, _ = user_auth.export_config(target)
 print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
-"
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${2:-}"
         ;;
     import-config|import)
         if [ -z "${2:-}" ]; then
@@ -1657,12 +1657,12 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         python3 -c "
 import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-sys.path.insert(0, '${SCRIPT_DIR}')
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2])
 import user_auth
-ok, msg = user_auth.import_config('${2}')
+ok, msg = user_auth.import_config(sys.argv[3])
 print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
-"
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${2}"
         ;;
     admin|administration)
         administration_menu

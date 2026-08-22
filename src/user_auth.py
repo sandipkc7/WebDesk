@@ -7,6 +7,7 @@ user storage (users.json), configuration export/import, and role-based permissio
 
 import os
 import sys
+import re
 import json
 import time
 import hmac
@@ -469,8 +470,8 @@ def add_user(caller_role: str, new_uname: str, new_upass: str, new_role: str = "
         else:
             new_role = "user"
 
-    if not new_uname or len(new_uname) < 2:
-        return False, "Username must be at least 2 characters long."
+    if not new_uname or not re.match(r"^[a-zA-Z0-9_\-\.]{2,32}$", new_uname):
+        return False, "Username must be 2-32 characters and contain only letters, numbers, hyphens, dots, and underscores."
 
     if not new_upass or len(new_upass) < 3:
         return False, "Password must be at least 3 characters long."

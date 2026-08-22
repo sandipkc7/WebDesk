@@ -14,6 +14,8 @@ import base64
 import threading
 import subprocess
 import time
+import shutil
+import urllib.parse
 
 def get_install_dir():
     if "WEBDESK_INSTALL_DIR" in os.environ and os.path.exists(os.environ["WEBDESK_INSTALL_DIR"]):
@@ -31,6 +33,10 @@ def get_install_dir():
     return os.path.expanduser("~/.local/share/webdesk")
 
 INSTALL_DIR = get_install_dir()
+sys.path.insert(0, INSTALL_DIR)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import user_auth
+
 PORT = 6086
 CERT_PEM = os.path.join(INSTALL_DIR, "webdesk.pem")
 CERT_CRT = os.path.join(INSTALL_DIR, "webdesk.crt")
@@ -56,11 +62,39 @@ def build_ws_frame(payload: bytes, binary: bool = True) -> bytes:
 def handle_client(conn, addr):
     try:
         data = conn.recv(4096).decode('utf-8', errors='ignore')
+        lines = data.split('\r\n')
+        req_line = lines[0] if len(lines) > 0 else ""
+        req_path = req_line.split(" ")[1] if len(req_line.split(" ")) > 1 else "/"
+        
+        parsed_url = urllib.parse.urlparse(req_path)
+        qs = urllib.parse.parse_qs(parsed_url.query)
+        token = qs.get("token", [""])[0]
+
         headers = {}
-        for line in data.split('\r\n')[1:]:
+        for line in lines[1:]:
             if ': ' in line:
                 k, v = line.split(': ', 1)
                 headers[k.lower()] = v.strip()
+
+        if not token:
+            ws_proto = headers.get("sec-websocket-protocol", "")
+            if ws_proto.startswith("bearer-"):
+                token = ws_proto[7:].strip()
+            elif ws_proto:
+                token = ws_proto.strip()
+
+        # Enforce token verification for audio stream
+        ok, user_or_err = user_auth.verify_token(token)
+        if not ok:
+            err_resp = (
+                "HTTP/1.1 401 Unauthorized\r\n"
+                "Content-Type: text/plain\r\n"
+                "Connection: close\r\n\r\n"
+                f"Unauthorized audio stream.\r\n"
+            )
+            conn.sendall(err_resp.encode('utf-8'))
+            conn.close()
+            return
 
         ws_key = headers.get('sec-websocket-key')
         if not ws_key:

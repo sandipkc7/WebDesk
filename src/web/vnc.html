@@ -939,9 +939,12 @@
                     if (res.ok) {
                         const data = await res.json();
                         tbody.innerHTML = '';
+                        const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                         (data.users || []).forEach(u => {
                             const tr = document.createElement('tr');
-                            const roleBadge = `<span class="hub-user-pill ${u.role}" style="padding: 2px 6px; font-size: 10px;">${u.role}</span>`;
+                            const safeName = esc(u.username);
+                            const safeRole = esc(u.role);
+                            const roleBadge = `<span class="hub-user-pill ${safeRole}" style="padding: 2px 6px; font-size: 10px;">${safeRole}</span>`;
                             const isSuspended = u.status === 'suspended';
                             const statusBadge = isSuspended 
                                 ? `<span style="color: #f87171; font-weight: bold; font-size: 11px;">⏸️ Suspended</span>` 
@@ -950,18 +953,27 @@
                             const isPrimaryAdmin = u.username === 'admin';
 
                             tr.innerHTML = `
-                                <td style="font-weight: bold;">${u.username}</td>
+                                <td style="font-weight: bold;">${safeName}</td>
                                 <td>${roleBadge}</td>
                                 <td>${statusBadge}</td>
                                 <td style="display: flex; gap: 4px; flex-wrap: wrap;">
-                                    <button class="btn-small-primary" onclick="window.WebDeskAuth.openPasswordModal('${u.username}')" title="Change Password">🔑</button>
+                                    <button class="btn-small-primary" data-user="${safeName}" title="Change Password">🔑</button>
                                     ${!isPrimaryAdmin ? (isSuspended 
-                                        ? `<button class="btn-small-primary" onclick="window.WebDeskAuth.unsuspendUser('${u.username}')" title="Reactivate Account">▶️ Unsuspend</button>` 
-                                        : `<button class="btn-small-danger" onclick="window.WebDeskAuth.suspendUser('${u.username}')" title="Suspend User & Block Login">⏸️ Suspend</button>`) : ''}
-                                    ${!isSelf ? `<button class="btn-small-danger" onclick="window.WebDeskAuth.kickUser('${u.username}')" title="Terminate active session">⚡ Kick</button>` : ''}
-                                    ${!isPrimaryAdmin && !isSelf ? `<button class="btn-small-danger" onclick="window.WebDeskAuth.deleteUser('${u.username}')" title="Delete User">🗑️</button>` : ''}
+                                        ? `<button class="btn-small-primary action-unsuspend" data-user="${safeName}" title="Reactivate Account">▶️ Unsuspend</button>` 
+                                        : `<button class="btn-small-danger action-suspend" data-user="${safeName}" title="Suspend User & Block Login">⏸️ Suspend</button>`) : ''}
+                                    ${!isSelf ? `<button class="btn-small-danger action-kick" data-user="${safeName}" title="Terminate active session">⚡ Kick</button>` : ''}
+                                    ${!isPrimaryAdmin && !isSelf ? `<button class="btn-small-danger action-delete" data-user="${safeName}" title="Delete User">🗑️</button>` : ''}
                                 </td>
                             `;
+                            tr.querySelector('button[title="Change Password"]').onclick = () => this.openPasswordModal(u.username);
+                            const unBtn = tr.querySelector('.action-unsuspend');
+                            if (unBtn) unBtn.onclick = () => this.unsuspendUser(u.username);
+                            const susBtn = tr.querySelector('.action-suspend');
+                            if (susBtn) susBtn.onclick = () => this.suspendUser(u.username);
+                            const kickBtn = tr.querySelector('.action-kick');
+                            if (kickBtn) kickBtn.onclick = () => this.kickUser(u.username);
+                            const delBtn = tr.querySelector('.action-delete');
+                            if (delBtn) delBtn.onclick = () => this.deleteUser(u.username);
                             tbody.appendChild(tr);
                         });
                     }
@@ -1612,7 +1624,9 @@
                         list.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">No files found in ~/Downloads.</div>`;
                         return;
                     }
+                    const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                     list.innerHTML = data.files.map(f => {
+                        const safeName = esc(f.name);
                         const sizeKB = (f.size / 1024).toFixed(1);
                         const sizeMB = (f.size / (1024 * 1024)).toFixed(2);
                         const displaySize = f.size > 1048576 ? `${sizeMB} MB` : `${sizeKB} KB`;
@@ -1620,10 +1634,10 @@
                         return `
                             <div class="file-item">
                                 <div>
-                                    <b>📄 ${f.name}</b>
+                                    <b>📄 ${safeName}</b>
                                     <div style="font-size: 11px; color: #9ca3af;">${displaySize}</div>
                                 </div>
-                                <a href="${dlUrl}" target="_blank" download="${f.name}">📥 Download</a>
+                                <a href="${dlUrl}" target="_blank" download="${safeName}">📥 Download</a>
                             </div>
                         `;
                     }).join('');
@@ -1882,7 +1896,8 @@
                 }
 
                 const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const url = `${proto}//${API_HOST}:6086`;
+                const token = (window.WebDeskAuth && window.WebDeskAuth.token) || sessionStorage.getItem('webdesk_token') || localStorage.getItem('webdesk_token') || '';
+                const url = `${proto}//${API_HOST}:6086/?token=${encodeURIComponent(token)}`;
 
                 try {
                     this.ws = new WebSocket(url);

@@ -7,9 +7,11 @@ remote power actions, special keystrokes forwarding, and file transfers.
 
 import os
 import sys
+import re
 import json
 import ssl
 import time
+import threading
 import subprocess
 import shutil
 import cgi
@@ -58,6 +60,13 @@ DOWNLOADS_DIR = get_downloads_dir()
 CONFIG_FILE = os.path.join(INSTALL_DIR, "config.env")
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
+# Security Constants
+MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB max file upload
+MAX_FAILED_LOGINS = 5
+LOCKOUT_WINDOW_SECONDS = 300  # 5 minute lockout after 5 consecutive failures
+RATE_LIMIT_LOCK = threading.Lock()
+FAILED_LOGIN_ATTEMPTS = {}  # ip -> list of timestamps
+
 # Active connected viewers tracking: username -> (last_seen_timestamp, role)
 ACTIVE_VIEWERS = {}
 
@@ -76,7 +85,12 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         pass
 
     def send_cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        origin = self.headers.get("Origin", "")
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+        else:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
         self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With, X-Filename")
 
@@ -217,10 +231,13 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # List files in ~/Downloads
+        # List files in ~/Downloads (Authenticated non-viewer only)
         if path in ["/api/files", "/files"]:
             user, err = self.get_token_user()
-            if user and user.get("role") == "viewer":
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
                 self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot access file downloads."})
                 return
 
@@ -241,8 +258,16 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "success": True, "files": file_list})
             return
 
-        # File download handling
+        # File download handling (Authenticated non-viewer only)
         if path.startswith("/api/download") or path.startswith("/download"):
+            user, err = self.get_token_user()
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
+                self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot download files."})
+                return
+
             # Check query param ?file= or URL path
             filename = ""
             if "file" in query:
@@ -282,19 +307,44 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        # 1. Login endpoint
+        # 1. Login endpoint (Rate Limited & Audited)
         if path in ["/api/auth/login", "/api/login"]:
+            client_ip = self.get_client_ip()
+            now = time.time()
+
+            # Check rate limiting lockout
+            with RATE_LIMIT_LOCK:
+                recent_fails = [t for t in FAILED_LOGIN_ATTEMPTS.get(client_ip, []) if now - t < LOCKOUT_WINDOW_SECONDS]
+                FAILED_LOGIN_ATTEMPTS[client_ip] = recent_fails
+                if len(recent_fails) >= MAX_FAILED_LOGINS:
+                    retry_wait = int(LOCKOUT_WINDOW_SECONDS - (now - recent_fails[0]))
+                    self.send_json(429, {
+                        "ok": False,
+                        "success": False,
+                        "error": f"Too many failed login attempts. Please wait {max(1, retry_wait)}s before retrying.",
+                        "code": "RATE_LIMITED"
+                    })
+                    return
+
             data = self.read_json_body()
             username = data.get("username", "")
             password = data.get("password", "")
-            client_ip = self.get_client_ip()
             user_agent = self.headers.get("User-Agent", "")
 
             ok, user_or_err = user_auth.authenticate(username, password)
             if not ok:
+                with RATE_LIMIT_LOCK:
+                    if client_ip not in FAILED_LOGIN_ATTEMPTS:
+                        FAILED_LOGIN_ATTEMPTS[client_ip] = []
+                    FAILED_LOGIN_ATTEMPTS[client_ip].append(time.time())
+
                 user_auth.log_login_event(username, client_ip, status="FAILED", reason=str(user_or_err), user_agent=user_agent)
                 self.send_json(401, {"ok": False, "success": False, "error": user_or_err})
                 return
+
+            # Clear failed login attempts on successful login
+            with RATE_LIMIT_LOCK:
+                FAILED_LOGIN_ATTEMPTS.pop(client_ip, None)
 
             token = user_auth.create_token(username)
             user_auth.log_login_event(username, client_ip, status="SUCCESS", role=user_or_err.get("role", "user"), user_agent=user_agent)
@@ -486,10 +536,21 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             self.send_json(200 if ok else 400, {"ok": ok, "success": ok, "message": msg})
             return
 
-        # 11. Profile Switcher
+        # 11. Profile Switcher (Authenticated non-viewer only)
         if path in ["/api/profile", "/api/set-profile"]:
+            user, err = self.get_token_user()
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
+                self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot change profiles."})
+                return
+
             data = self.read_json_body()
-            prof = data.get("profile", "balanced")
+            prof = str(data.get("profile", "balanced")).strip().lower()
+            if prof not in ["ultra_fast", "balanced", "high_quality", "low_bandwidth", "custom"]:
+                self.send_json(400, {"ok": False, "success": False, "error": f"Invalid profile: {prof}"})
+                return
             try:
                 with open(CONFIG_FILE, "w") as f:
                     f.write(f"PROFILE={prof}\n")
@@ -498,18 +559,29 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "success": True, "profile": prof})
             return
 
-        # 12. Resolution Matching
+        # 12. Resolution Matching (Authenticated non-viewer only)
         if path in ["/api/set-resolution", "/set-resolution"]:
+            user, err = self.get_token_user()
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
+                self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot change resolution."})
+                return
+
             data = self.read_json_body()
             res = data.get("resolution") or data.get("mode")
             width = data.get("width")
             height = data.get("height")
 
             if width and height:
-                res = f"{int(width)}x{int(height)}"
+                try:
+                    res = f"{int(width)}x{int(height)}"
+                except Exception:
+                    pass
 
-            if not res:
-                self.send_json(400, {"ok": False, "success": False, "error": "Missing resolution parameter."})
+            if not res or not re.match(r"^\d{3,5}x\d{3,5}$", str(res)):
+                self.send_json(400, {"ok": False, "success": False, "error": "Invalid resolution format (expected e.g. 1920x1080)."})
                 return
 
             display = os.environ.get("DISPLAY", ":0")
@@ -533,7 +605,10 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         # 13. Keystroke Forwarding
         if path in ["/api/key", "/api/send-keys"]:
             user, err = self.get_token_user()
-            if user and user.get("role") == "viewer":
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
                 self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot send keystrokes."})
                 return
 
@@ -555,7 +630,10 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         # 14. Power Actions
         if path in ["/api/power", "/api/auth/power"]:
             user, err = self.get_token_user()
-            if user and user.get("role") != "admin":
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") != "admin":
                 self.send_json(403, {"ok": False, "success": False, "error": "Administrative permissions required for power actions."})
                 return
 
@@ -590,21 +668,43 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 self.send_json(500, {"ok": False, "success": False, "error": str(e)})
             return
 
-        # 15. File Uploads
+        # 15. File Uploads (Authenticated non-viewer only, chunked & bounded)
         if path in ["/api/upload", "/upload"]:
             user, err = self.get_token_user()
-            if user and user.get("role") == "viewer":
+            if not user:
+                self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
+                return
+            if user.get("role") == "viewer":
                 self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot upload files."})
+                return
+
+            content_len = int(self.headers.get("Content-Length", 0))
+            if content_len <= 0:
+                self.send_json(400, {"ok": False, "success": False, "error": "Empty upload payload."})
+                return
+            if content_len > MAX_UPLOAD_SIZE:
+                self.send_json(413, {"ok": False, "success": False, "error": f"Payload exceeds maximum allowed size ({MAX_UPLOAD_SIZE // (1024*1024)}MB)."})
                 return
 
             content_type = self.headers.get("Content-Type", "")
             if not content_type.startswith("multipart/form-data"):
                 filename = self.headers.get("X-Filename", "uploaded_file")
                 filename = os.path.basename(urllib.parse.unquote(filename))
+                if not filename or filename.startswith("."):
+                    filename = f"upload_{int(time.time())}"
                 filepath = os.path.join(DOWNLOADS_DIR, filename)
-                content_len = int(self.headers.get("Content-Length", 0))
+
+                bytes_remaining = content_len
+                chunk_size = 64 * 1024
                 with open(filepath, "wb") as f:
-                    f.write(self.rfile.read(content_len))
+                    while bytes_remaining > 0:
+                        read_size = min(chunk_size, bytes_remaining)
+                        chunk = self.rfile.read(read_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        bytes_remaining -= len(chunk)
+
                 self.send_json(200, {"ok": True, "success": True, "filename": filename, "saved_to": filepath})
                 return
 
@@ -621,9 +721,11 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 item = form[field]
                 if item.filename:
                     fname = os.path.basename(item.filename)
+                    if not fname or fname.startswith("."):
+                        fname = f"upload_{int(time.time())}"
                     fpath = os.path.join(DOWNLOADS_DIR, fname)
                     with open(fpath, "wb") as f:
-                        f.write(item.file.read())
+                        shutil.copyfileobj(item.file, f)
                     saved_files.append(fname)
 
             self.send_json(200, {"ok": True, "success": True, "saved_files": saved_files})
@@ -633,7 +735,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
 
 
 def run_api_server():
-    server_address = ("0.0.0.0", PORT)
+    server_address = ("127.0.0.1", PORT)
     httpd = HTTPServer(server_address, WebDeskAPIHandler)
 
     if os.path.exists(CERT_PEM):
@@ -645,7 +747,7 @@ def run_api_server():
         ssl_ctx.load_cert_chain(certfile=CERT_CRT, keyfile=CERT_KEY)
         httpd.socket = ssl_ctx.wrap_socket(httpd.socket, server_side=True)
 
-    print(f"[WebDesk API] Listening on https://0.0.0.0:{PORT}...")
+    print(f"[WebDesk API] Listening on https://127.0.0.1:{PORT} (Loopback)...")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
