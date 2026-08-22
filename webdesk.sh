@@ -9,17 +9,22 @@ set -eo pipefail
 
 APP_NAME="WebDesk"
 VERSION="2.3.1"
-SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_NAME}"
 
-# Resolve installation directory (works for current user, sudo, and systemd service)
-if [ -d "/home/sandeep/.local/share/webdesk" ]; then
-    INSTALL_DIR="/home/sandeep/.local/share/webdesk"
-    USER_HOME="/home/sandeep"
+# Resolve real user and installation directory (works for current user, sudo, and systemd service)
+SCRIPT_OWNER=$(stat -c '%U' "${SCRIPT_PATH}" 2>/dev/null || echo "")
+if [ -n "${SUDO_USER}" ]; then
+    REAL_USER="${SUDO_USER}"
+elif [ "${USER}" = "root" ] && [ -n "${SCRIPT_OWNER}" ] && [ "${SCRIPT_OWNER}" != "root" ]; then
+    REAL_USER="${SCRIPT_OWNER}"
 else
-    REAL_USER="${SUDO_USER:-$USER}"
-    USER_HOME=$(getent passwd "${REAL_USER}" | cut -d: -f6)
-    INSTALL_DIR="${USER_HOME}/.local/share/webdesk"
+    REAL_USER="${USER:-$SCRIPT_OWNER}"
 fi
+[ -z "${REAL_USER}" ] && REAL_USER="root"
+USER_HOME=$(getent passwd "${REAL_USER}" 2>/dev/null | cut -d: -f6 || echo "${HOME}")
+INSTALL_DIR="${USER_HOME}/.local/share/webdesk"
 
 VNC_ROOT="${INSTALL_DIR}/root"
 VNC_PORT="5900"
@@ -39,7 +44,7 @@ SERVICE_FILE="/etc/systemd/system/webdesk.service"
 DEFAULT_PROFILE="balanced"
 if [ -f "${CONFIG_FILE}" ]; then
     # shellcheck disable=SC1090
-    source "${CONFIG_FILE}"
+    source "${CONFIG_FILE}" 2>/dev/null || true
 else
     mkdir -p "${INSTALL_DIR}"
     echo "PROFILE=${DEFAULT_PROFILE}" > "${CONFIG_FILE}"
@@ -47,8 +52,9 @@ else
 fi
 
 export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
-export PYTHONPATH="${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
+export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
 export PATH="${VNC_ROOT}/usr/bin:${PATH}"
+export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
 
 # Terminal Colors
 GREEN='\033[0;32m'
@@ -69,8 +75,79 @@ is_running() {
     pgrep -f "x11vnc" >/dev/null 2>&1 && pgrep -f "websockify" >/dev/null 2>&1
 }
 
-is_service_enabled() {
+is_service_installed() {
+    [ -f "${SERVICE_FILE}" ] || systemctl is-enabled webdesk.service >/dev/null 2>&1
+}
+
+is_service_active() {
     systemctl is-active webdesk.service >/dev/null 2>&1
+}
+
+is_service_enabled() {
+    is_service_installed
+}
+
+ensure_runtime_files() {
+    mkdir -p "${INSTALL_DIR}" "${VNC_ROOT}/usr/share/novnc/app/styles"
+    local GITHUB_RAW="https://raw.githubusercontent.com/sandipkc7/WebDesk/main"
+
+    # 1. Sync / fetch Python backend modules
+    for py_file in user_auth.py api_server.py audio_server.py webdesk_gui.py; do
+        if [ -f "${SCRIPT_DIR}/src/${py_file}" ]; then
+            cp -u "${SCRIPT_DIR}/src/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || cp "${SCRIPT_DIR}/src/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || true
+        elif [ -f "${SCRIPT_DIR}/${py_file}" ]; then
+            cp -u "${SCRIPT_DIR}/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || cp "${SCRIPT_DIR}/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || true
+        elif [ ! -f "${INSTALL_DIR}/${py_file}" ]; then
+            curl -fsSL "${GITHUB_RAW}/src/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || \
+            curl -fsSL "${GITHUB_RAW}/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || true
+        fi
+    done
+
+    # 2. Sync / fetch Web Client assets
+    if [ -d "${VNC_ROOT}/usr/share/novnc" ]; then
+        # vnc.html & index.html
+        if [ -f "${SCRIPT_DIR}/src/web/vnc.html" ]; then
+            cp -u "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+        elif [ -f "${SCRIPT_DIR}/vnc.html" ]; then
+            cp -u "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || cp "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/vnc.html" ] || ! grep -q "webdesk_hub" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null; then
+            curl -fsSL "${GITHUB_RAW}/src/web/vnc.html" -o "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
+        fi
+
+        # login.html
+        if [ -f "${SCRIPT_DIR}/src/web/login.html" ]; then
+            cp -u "${SCRIPT_DIR}/src/web/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+        elif [ -f "${SCRIPT_DIR}/login.html" ]; then
+            cp -u "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || cp "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/login.html" ]; then
+            curl -fsSL "${GITHUB_RAW}/src/web/login.html" -o "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+        fi
+
+        # webdesk.css
+        if [ -f "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" ]; then
+            cp -u "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || cp "${SCRIPT_DIR}/src/web/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+        elif [ -f "${SCRIPT_DIR}/app/styles/webdesk.css" ]; then
+            cp -u "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || cp "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" ]; then
+            curl -fsSL "${GITHUB_RAW}/src/web/app/styles/webdesk.css" -o "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+        fi
+    fi
+
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}/src:${SCRIPT_DIR}:${PYTHONPATH}"
+    python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    user_auth.ensure_initialized()
+except Exception:
+    pass
+" 2>/dev/null || true
 }
 
 get_profile_flags() {
@@ -140,6 +217,7 @@ install_webdesk() {
     mkdir -p "${USER_HOME}/.local/bin"
     ln -sf "${SCRIPT_PATH}" "${USER_HOME}/.local/bin/webdesk"
 
+    ensure_runtime_files
     generate_ssl_cert
     ensure_index_page
     echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}\n"
@@ -213,10 +291,31 @@ stop_webdesk_silent() {
 }
 
 start_webdesk() {
+    if is_service_installed && [ "${1:-}" != "--user-only" ]; then
+        echo -e "${BLUE}${BOLD}[WebDesk]${NC} Starting 24/7 systemd background service..."
+        if [ "$EUID" -eq 0 ]; then
+            systemctl start webdesk.service 2>/dev/null || true
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo systemctl start webdesk.service 2>/dev/null || true
+        fi
+        sleep 1.5
+        if is_running; then
+            echo -e "${GREEN}${BOLD}✔ WebDesk system service is ACTIVE (Encrypted HTTPS / WSS) on port ${WEB_PORT}!${NC}\n"
+            echo -e "${BOLD}Access the encrypted desktop in your host PC browser:${NC}"
+            for ip in $(get_ips); do
+                echo -e "  👉 ${CYAN}https://${ip}:${WEB_PORT}/${NC}"
+            done
+            echo ""
+            return 0
+        fi
+    fi
+
     if [ ! -f "${VNC_ROOT}/usr/bin/x11vnc" ] || [ ! -d "${VNC_ROOT}/usr/share/novnc" ]; then
         echo -e "${YELLOW}[WebDesk] Required binaries not found. Triggering automated install...${NC}"
         install_webdesk
     fi
+
+    ensure_runtime_files
 
     if [ ! -f "${CERT_PEM}" ]; then
         generate_ssl_cert
@@ -240,10 +339,22 @@ start_webdesk() {
     PASS_OPT="-nopw"
 
     # Start x11vnc with auto-auth detection
+    DISP_INFO=$(get_active_display_and_auth)
+    DETECTED_DISP=$(echo "$DISP_INFO" | cut -d'|' -f1)
+    DETECTED_AUTH=$(echo "$DISP_INFO" | cut -d'|' -f2)
+    [ -n "$DETECTED_DISP" ] && DISPLAY_NUM="${DISPLAY:-$DETECTED_DISP}"
+
+    AUTH_FLAG=""
+    if [ -n "$DETECTED_AUTH" ] && [ -r "$DETECTED_AUTH" ]; then
+        AUTH_FLAG="-auth ${DETECTED_AUTH}"
+    else
+        AUTH_FLAG="-auth guess"
+    fi
+
     # shellcheck disable=SC2086
     "${VNC_ROOT}/usr/bin/x11vnc" \
         -display "${DISPLAY_NUM}" \
-        -auth /var/run/lightdm/root/:0 \
+        ${AUTH_FLAG} \
         -forever \
         -shared \
         -listen 127.0.0.1 \
@@ -304,10 +415,74 @@ log_msg() {
     echo "${msg}" >> "${LOG_FILE}" 2>/dev/null || true
 }
 
-# System-level 24/7 service (Handles Display Manager / LightDM login screen & user sessions)
+get_active_display_and_auth() {
+    local active_disp=""
+    local active_auth=""
+    local active_vt=""
+
+    # 1. Read active console VT (e.g. tty7, tty8) from sysfs
+    if [ -r "/sys/class/tty/tty0/active" ]; then
+        active_vt=$(cat /sys/class/tty/tty0/active 2>/dev/null || true)
+    fi
+
+    # 2. Check systemd-logind active session on seat0
+    if command -v loginctl >/dev/null 2>&1; then
+        local active_session
+        active_session=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
+        if [ -n "$active_session" ]; then
+            active_disp=$(loginctl show-session "$active_session" -p Display --value 2>/dev/null || true)
+            if [ -z "$active_vt" ]; then
+                local vtnr
+                vtnr=$(loginctl show-session "$active_session" -p VTNr --value 2>/dev/null || true)
+                [ -n "$vtnr" ] && active_vt="tty${vtnr}"
+            fi
+        fi
+    fi
+
+    # 3. Match running Xorg process with the active VT or display
+    local xorg_match=""
+    if [ -n "$active_vt" ]; then
+        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -w "$active_vt" | head -n 1 || true)
+        if [ -z "$xorg_match" ]; then
+            xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep "$active_vt" | head -n 1 || true)
+        fi
+    fi
+    if [ -z "$xorg_match" ] && [ -n "$active_disp" ]; then
+        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -w "$active_disp" | head -n 1 || true)
+    fi
+    if [ -z "$xorg_match" ]; then
+        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | tail -n 1 || true)
+    fi
+
+    if [ -n "$xorg_match" ]; then
+        [ -z "$active_disp" ] && active_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo ":0")
+        active_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
+    fi
+
+    [ -z "$active_disp" ] && active_disp=":0"
+
+    # 4. Fallback auth file locations
+    if [ -z "$active_auth" ] || [ ! -r "$active_auth" ]; then
+        if [ -r "/var/run/lightdm/root/${active_disp}" ]; then
+            active_auth="/var/run/lightdm/root/${active_disp}"
+        elif [ -r "/run/lightdm/root/${active_disp}" ]; then
+            active_auth="/run/lightdm/root/${active_disp}"
+        elif [ -r "/run/lightdm/${REAL_USER}/xauthority" ]; then
+            active_auth="/run/lightdm/${REAL_USER}/xauthority"
+        elif [ -r "${USER_HOME}/.Xauthority" ]; then
+            active_auth="${USER_HOME}/.Xauthority"
+        fi
+    fi
+
+    echo "${active_disp}|${active_auth}"
+}
+
+# System-level 24/7 service (Handles Display Manager / LightDM login screen, switch-user & user sessions)
 run_system_service() {
+    export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
+    export HOME="${USER_HOME}"
     export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
-    export PYTHONPATH="${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
     export PATH="${VNC_ROOT}/usr/bin:${PATH}"
 
     mkdir -p "${INSTALL_DIR}"
@@ -318,8 +493,8 @@ run_system_service() {
     log_msg "=== WebDesk 24/7 System Service Started (PID $$) ==="
     log_msg "=========================================================="
 
-    # WebDesk Multi-User Portal handles authentication; x11vnc runs with -nopw on 127.0.0.1
     PASS_OPT="-nopw"
+    get_profile_flags
     log_msg "Security: WebDesk Multi-User Portal Authentication ENABLED"
 
     # 1. Start websockify daemon
@@ -339,27 +514,13 @@ run_system_service() {
         python3 "${INSTALL_DIR}/api_server.py" -D >> "${LOG_FILE}" 2>&1 || true
     fi
 
-    # 3. Supervisor loop: dynamically tracks Xorg display & LightDM/User session changes
+    # 3. Dynamic Display & Switch-User Supervisor Loop
     log_msg "Entering Dynamic Display & Authentication Supervisor loop..."
     while true; do
-        XORG_PROC=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | head -n 1 || true)
-        ACTIVE_DISP=":0"
-        ACTIVE_AUTH=""
-
-        if [ -n "$XORG_PROC" ]; then
-            ACTIVE_DISP=$(echo "$XORG_PROC" | grep -oP ':\d+' | head -n 1 || echo ":0")
-            ACTIVE_AUTH=$(echo "$XORG_PROC" | grep -oP '(?<=-auth\s)\S+' || echo "")
-        fi
-
-        if [ -z "$ACTIVE_AUTH" ] || [ ! -r "$ACTIVE_AUTH" ]; then
-            if [ -r "/var/run/lightdm/root/${ACTIVE_DISP}" ]; then
-                ACTIVE_AUTH="/var/run/lightdm/root/${ACTIVE_DISP}"
-            elif [ -r "/run/lightdm/root/${ACTIVE_DISP}" ]; then
-                ACTIVE_AUTH="/run/lightdm/root/${ACTIVE_DISP}"
-            elif [ -r "/home/sandeep/.Xauthority" ]; then
-                ACTIVE_AUTH="/home/sandeep/.Xauthority"
-            fi
-        fi
+        get_profile_flags
+        DISP_INFO=$(get_active_display_and_auth)
+        ACTIVE_DISP=$(echo "$DISP_INFO" | cut -d'|' -f1)
+        ACTIVE_AUTH=$(echo "$DISP_INFO" | cut -d'|' -f2)
 
         AUTH_FLAG=""
         if [ -n "$ACTIVE_AUTH" ] && [ -r "$ACTIVE_AUTH" ]; then
@@ -372,6 +533,7 @@ run_system_service() {
 
         log_msg "Spawning x11vnc backend for display ${ACTIVE_DISP}..."
 
+        # Launch x11vnc in background
         # shellcheck disable=SC2086
         "${VNC_ROOT}/usr/bin/x11vnc" \
             -display "${ACTIVE_DISP}" \
@@ -381,8 +543,27 @@ run_system_service() {
             -listen 127.0.0.1 \
             -rfbport "${VNC_PORT}" \
             ${VNC_TUNING} \
-            ${PASS_OPT} >> "${LOG_FILE}" 2>&1 || true
+            ${PASS_OPT} >> "${LOG_FILE}" 2>&1 &
+        VNC_PID=$!
 
+        # Watch for display/VT switch or process exit
+        while kill -0 "$VNC_PID" 2>/dev/null; do
+            sleep 1.5
+            NEW_DISP_INFO=$(get_active_display_and_auth)
+            NEW_DISP=$(echo "$NEW_DISP_INFO" | cut -d'|' -f1)
+            NEW_AUTH=$(echo "$NEW_DISP_INFO" | cut -d'|' -f2)
+
+            # If active display or auth changes (e.g. switch user to greeter on :1 or back to :0)
+            if [ "$NEW_DISP" != "$ACTIVE_DISP" ] || ([ -n "$NEW_AUTH" ] && [ "$NEW_AUTH" != "$ACTIVE_AUTH" ] && [ -r "$NEW_AUTH" ]); then
+                log_msg "Active session/display switched: ${ACTIVE_DISP} -> ${NEW_DISP}. Restarting x11vnc..."
+                kill -TERM "$VNC_PID" 2>/dev/null || true
+                sleep 0.5
+                kill -9 "$VNC_PID" 2>/dev/null || true
+                break
+            fi
+        done
+
+        wait "$VNC_PID" 2>/dev/null || true
         log_msg "x11vnc session ended or display reset. Re-probing in 1s..."
         sleep 1
     done
@@ -397,7 +578,6 @@ install_system_service() {
 
     echo -e "${BLUE}${BOLD}[WebDesk]${NC} Installing systemd service for Login Screen (LightDM) streaming..."
     
-    # Ensure certs are readable by root
     chmod 644 "${CERT_PEM}" "${CERT_CRT}" "${CERT_KEY}" 2>/dev/null || true
 
     cat << EOF_SVC > "${SERVICE_FILE}"
@@ -439,8 +619,12 @@ uninstall_system_service() {
 
 stop_webdesk() {
     echo -e "${YELLOW}[WebDesk] Stopping streaming services...${NC}"
-    if is_service_enabled; then
-        systemctl stop webdesk.service 2>/dev/null || true
+    if is_service_installed; then
+        if [ "$EUID" -eq 0 ]; then
+            systemctl stop webdesk.service 2>/dev/null || true
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo systemctl stop webdesk.service 2>/dev/null || true
+        fi
     fi
     stop_webdesk_silent
     if ! is_running; then
@@ -487,8 +671,16 @@ set_profile() {
     
     if is_running; then
         echo -e "${YELLOW}--> Restarting WebDesk to apply changes...${NC}"
-        stop_webdesk_silent
-        start_webdesk
+        if is_service_installed; then
+            if [ "$EUID" -eq 0 ]; then
+                systemctl restart webdesk.service 2>/dev/null || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo systemctl restart webdesk.service 2>/dev/null || true
+            fi
+        else
+            stop_webdesk_silent
+            start_webdesk
+        fi
     fi
 }
 
@@ -497,7 +689,7 @@ status_webdesk() {
     CUR_RES=$(DISPLAY="${DISPLAY_NUM}" xrandr 2>/dev/null | grep -E '\*' | awk '{print $1}' || echo "Default")
     if is_running; then
         echo -e "${GREEN}${BOLD}● WebDesk is RUNNING${NC}"
-        if is_service_enabled; then
+        if is_service_installed; then
             echo -e "  Service Mode     : ${GREEN}${BOLD}System Service (Login Screen / LightDM Active)${NC}"
         else
             echo -e "  Service Mode     : ${CYAN}User Session Mode (:0)${NC}"
@@ -518,12 +710,19 @@ status_webdesk() {
             echo -e "  👉 ${CYAN}https://${ip}:${WEB_PORT}/${NC}"
         done
     else
-        echo -e "${RED}${BOLD}○ WebDesk is STOPPED${NC}"
+        if is_service_installed; then
+            echo -e "${RED}${BOLD}○ WebDesk is STOPPED (24/7 System Service Inactive)${NC}"
+        else
+            echo -e "${RED}${BOLD}○ WebDesk is STOPPED${NC}"
+        fi
     fi
 }
 
 manage_web_users() {
-    export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH}"
+    set +e
+    ensure_runtime_files
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${PYTHONPATH}"
+
     while true; do
         clear
         echo -e "${BOLD}${CYAN}--- WebDesk Multi-User Web Accounts Manager ---${NC}\n"
@@ -547,16 +746,22 @@ manage_web_users() {
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-for u in user_auth.list_users():
-    role_color = '\033[1;36m' if u['role'] == 'admin' else ('\033[1;32m' if u['role'] == 'user' else '\033[1;33m')
-    status_color = '\033[1;32m' if u.get('status') == 'active' else '\033[1;31m'
-    status_str = u.get('status', 'active')
-    st = u.get('settings', {})
-    prof_res = f\"{st.get('profile', 'balanced')} | {st.get('resolution', 'auto')}\"
-    print(f\"  {u['username']:<15} {role_color}{u['role']:<15}\033[0m \033[1;35m{prof_res:<22}\033[0m {status_color}{status_str:<15}\033[0m {u['created_at']}\")
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    user_auth.ensure_initialized()
+    users = user_auth.list_users()
+    for u in users:
+        role_color = '\033[1;36m' if u['role'] == 'admin' else ('\033[1;32m' if u['role'] == 'user' else '\033[1;33m')
+        status_color = '\033[1;32m' if u.get('status') == 'active' else '\033[1;31m'
+        status_str = u.get('status', 'active')
+        st = u.get('settings', {})
+        prof_res = f\"{st.get('profile', 'balanced')} | {st.get('resolution', 'auto')}\"
+        print(f\"  {u['username']:<15} {role_color}{u['role']:<15}\033[0m \033[1;35m{prof_res:<22}\033[0m {status_color}{status_str:<15}\033[0m {u.get('created_at', '')}\")
+except Exception as e:
+    print(f'  Error loading user database: {e}')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             2)
                 echo -e "\n${BLUE}${BOLD}[Add New Web User]${NC}"
@@ -571,11 +776,15 @@ for u in user_auth.list_users():
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.add_user('admin', '${new_uname}', '${new_upass}', '${ROLE_STR}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.add_user('admin', '${new_uname}', '${new_upass}', '${ROLE_STR}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             3)
                 echo -e "\n${BLUE}${BOLD}[Change User Password]${NC}"
@@ -585,11 +794,15 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.change_password('admin', 'admin', '${target_uname}', '${target_upass}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.change_password('admin', 'admin', '${target_uname}', '${target_upass}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             4)
                 echo -e "\n${YELLOW}${BOLD}[Suspend / Unsuspend User Account]${NC}"
@@ -599,14 +812,18 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-if '${susp_act}' == '1':
-    ok, msg = user_auth.suspend_user('admin', '${susp_uname}')
-else:
-    ok, msg = user_auth.unsuspend_user('admin', '${susp_uname}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    if '${susp_act}' == '1':
+        ok, msg = user_auth.suspend_user('admin', '${susp_uname}')
+    else:
+        ok, msg = user_auth.unsuspend_user('admin', '${susp_uname}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             5)
                 echo -e "\n${RED}${BOLD}[Terminate Active User Session (Kick)]${NC}"
@@ -614,11 +831,15 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.terminate_user_session('admin', '${kick_uname}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.terminate_user_session('admin', '${kick_uname}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             6)
                 echo -e "\n${RED}${BOLD}[Delete Web User]${NC}"
@@ -626,11 +847,15 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.delete_user('admin', '', '${del_uname}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.delete_user('admin', '', '${del_uname}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             7)
                 echo -e "\n${YELLOW}${BOLD}[Reset All Web Users to Factory Defaults]${NC}"
@@ -646,14 +871,18 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                     python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.reset_default_users()
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.reset_default_users()
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
                 else
                     echo -e "\n${CYAN}Reset cancelled.${NC}"
                 fi
-                pause_prompt
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             8)
                 echo -e "\n${BLUE}${BOLD}[Export Full WebDesk Configuration]${NC}"
@@ -663,11 +892,15 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg, _ = user_auth.export_config('${exp_dest}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
-                pause_prompt
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg, _ = user_auth.export_config('${exp_dest}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             9)
                 echo -e "\n${YELLOW}${BOLD}[Import Full WebDesk Configuration]${NC}"
@@ -676,14 +909,18 @@ print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0
                     python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
-import user_auth
-ok, msg = user_auth.import_config('${imp_src}')
-print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
-"
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.import_config('${imp_src}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
                 else
                     echo -e "\n${CYAN}Import cancelled.${NC}"
                 fi
-                pause_prompt
+                pause_prompt "Press Enter to return to user menu..."
                 ;;
             0|*)
                 break
@@ -805,11 +1042,14 @@ BANNER_EOF
 }
 
 pause_prompt() {
+    local prompt_msg="${1:-Press Enter to return to main menu...}"
     echo ""
-    read -rp "Press Enter to return to main menu..." </dev/tty || true
+    read -rp "${prompt_msg}" </dev/tty || true
 }
 
 interactive_menu() {
+    set +e
+    ensure_runtime_files
     while true; do
         print_menu_header
 
@@ -846,10 +1086,19 @@ interactive_menu() {
                 pause_prompt
                 ;;
             2)
-                if is_service_enabled; then
+                if is_service_installed; then
                     echo -e "${YELLOW}Restarting 24/7 System Service (sudo systemctl restart webdesk.service)...${NC}"
-                    sudo systemctl restart webdesk.service
-                    echo -e "${GREEN}✔ WebDesk system service restarted successfully.${NC}"
+                    if [ "$EUID" -eq 0 ]; then
+                        systemctl restart webdesk.service 2>/dev/null || true
+                    elif command -v sudo >/dev/null 2>&1; then
+                        sudo systemctl restart webdesk.service 2>/dev/null || true
+                    fi
+                    sleep 1.5
+                    if is_running; then
+                        echo -e "${GREEN}✔ WebDesk system service restarted successfully.${NC}"
+                    else
+                        echo -e "${RED}[!] Failed to restart service. Check logs in Option 9.${NC}"
+                    fi
                 else
                     echo -e "${YELLOW}Restarting WebDesk user session...${NC}"
                     stop_webdesk_silent
@@ -948,8 +1197,10 @@ interactive_menu() {
                 pause_prompt
                 ;;
             8)
-                if [ -f "${SCRIPT_PATH%/*}/webdesk_gui.py" ]; then
-                    python3 "${SCRIPT_PATH%/*}/webdesk_gui.py" &
+                if [ -f "${SCRIPT_DIR}/webdesk_gui.py" ]; then
+                    python3 "${SCRIPT_DIR}/webdesk_gui.py" &
+                elif [ -f "${INSTALL_DIR}/webdesk_gui.py" ]; then
+                    python3 "${INSTALL_DIR}/webdesk_gui.py" &
                 fi
                 pause_prompt
                 ;;
@@ -980,6 +1231,8 @@ interactive_menu() {
     done
 }
 
+ensure_runtime_files
+
 case "${1}" in
     start)
         start_webdesk
@@ -987,9 +1240,25 @@ case "${1}" in
     stop)
         stop_webdesk
         ;;
-    restart)
-        stop_webdesk_silent
-        start_webdesk
+    restart|restart-service)
+        if is_service_installed; then
+            echo -e "${YELLOW}Restarting WebDesk 24/7 system service...${NC}"
+            if [ "$EUID" -eq 0 ]; then
+                systemctl restart webdesk.service 2>/dev/null || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo systemctl restart webdesk.service 2>/dev/null || true
+            fi
+            sleep 1.5
+            if is_running; then
+                echo -e "${GREEN}✔ System service restarted successfully.${NC}"
+            else
+                echo -e "${RED}[!] Failed to restart service. Check logs: ./webdesk.sh logs${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Restarting WebDesk user session...${NC}"
+            stop_webdesk_silent
+            start_webdesk
+        fi
         ;;
     status)
         status_webdesk
@@ -1003,11 +1272,6 @@ case "${1}" in
         ;;
     system-service)
         run_system_service
-        ;;
-    restart-service)
-        echo -e "${YELLOW}Restarting WebDesk 24/7 system service...${NC}"
-        sudo systemctl restart webdesk.service
-        echo -e "${GREEN}✔ System service restarted.${NC}"
         ;;
     install-service)
         install_system_service
@@ -1036,20 +1300,14 @@ case "${1}" in
     disable-autostart)
         disable_autostart
         ;;
-    set-password|password)
-        set_password
-        ;;
-    remove-password)
-        remove_password
-        ;;
     reset-users|reset-defaults)
         if ! verify_master_password; then
             exit 1
         fi
-        export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH}"
         python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}')
 import user_auth
 ok, msg = user_auth.reset_default_users()
 print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
@@ -1059,10 +1317,10 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         if ! verify_master_password; then
             exit 1
         fi
-        export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH}"
         python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}')
 import user_auth
 target = '${2:-}' or None
 ok, msg, _ = user_auth.export_config(target)
@@ -1078,10 +1336,10 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         if ! verify_master_password; then
             exit 1
         fi
-        export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH}"
         python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}')
 import user_auth
 ok, msg = user_auth.import_config('${2}')
 print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')

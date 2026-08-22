@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Webdesk</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" sizes="32x32" type="image/png" href="app/images/icons/novnc-32x32.png">
+    
+    <script>
+        // Enforce HTTPS - redirect immediately if accessed via unsecure HTTP
+        if (window.location.protocol === 'http:') {
+            window.location.replace(window.location.href.replace('http:', 'https:'));
+        }
+    </script>
+
+    <style>
+        :root {
+            --wd-bg: #0b0f19;
+            --wd-card-bg: rgba(17, 24, 39, 0.92);
+            --wd-border: rgba(255, 255, 255, 0.1);
+            --wd-border-focus: #06b6d4;
+            --wd-primary: #06b6d4;
+            --wd-primary-hover: #0891b2;
+            --wd-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #6366f1 100%);
+            --wd-text: #f3f4f6;
+            --wd-text-muted: #9ca3af;
+            --wd-input-bg: rgba(31, 41, 55, 0.85);
+            --wd-radius: 20px;
+            --wd-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+            --wd-danger-bg: rgba(239, 68, 68, 0.18);
+            --wd-danger-border: rgba(239, 68, 68, 0.35);
+            --wd-danger-text: #fca5a5;
+            --wd-success-bg: rgba(34, 197, 94, 0.18);
+            --wd-success-border: rgba(34, 197, 94, 0.35);
+            --wd-success-text: #86efac;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--wd-bg);
+            color: var(--wd-text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            position: relative;
+            padding: 20px;
+        }
+
+        /* Ambient glowing background blobs */
+        .bg-glow {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.28;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-glow-1 {
+            width: 380px;
+            height: 380px;
+            background: #06b6d4;
+            top: -60px;
+            left: -60px;
+        }
+        .bg-glow-2 {
+            width: 440px;
+            height: 440px;
+            background: #6366f1;
+            bottom: -80px;
+            right: -80px;
+        }
+
+        /* Main Login Card */
+        .login-card {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 380px;
+            background: var(--wd-card-bg);
+            backdrop-filter: blur(28px);
+            -webkit-backdrop-filter: blur(28px);
+            border: 1px solid var(--wd-border);
+            border-radius: var(--wd-radius);
+            box-shadow: var(--wd-shadow);
+            padding: 36px 30px;
+            animation: fadeInCard 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes fadeInCard {
+            from {
+                opacity: 0;
+                transform: translateY(16px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Header: Only Webdesk */
+        .brand-header {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+
+        .brand-title {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: var(--wd-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Alert box */
+        .alert-box {
+            display: none;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 18px;
+            line-height: 1.4;
+            animation: fadeInAlert 0.2s ease;
+        }
+        @keyframes fadeInAlert {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .alert-error {
+            background: var(--wd-danger-bg);
+            border: 1px solid var(--wd-danger-border);
+            color: var(--wd-danger-text);
+        }
+        .alert-success {
+            background: var(--wd-success-bg);
+            border: 1px solid var(--wd-success-border);
+            color: var(--wd-success-text);
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--wd-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--wd-input-bg);
+            border: 1px solid var(--wd-border);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 14px;
+            padding: 12px 16px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .form-input:focus {
+            border-color: var(--wd-border-focus);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25);
+            background: rgba(31, 41, 55, 0.95);
+        }
+        .form-input::placeholder {
+            color: rgba(156, 163, 175, 0.5);
+        }
+
+        .toggle-pw-btn {
+            position: absolute;
+            right: 12px;
+            background: transparent;
+            border: none;
+            color: var(--wd-text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 4px 6px;
+            border-radius: 6px;
+        }
+        .toggle-pw-btn:hover {
+            color: #ffffff;
+        }
+
+        /* Submit Button */
+        .btn-submit {
+            width: 100%;
+            background: var(--wd-gradient);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            padding: 13px 20px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(6, 182, 212, 0.35);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(6, 182, 212, 0.5);
+            filter: brightness(1.08);
+        }
+        .btn-submit:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .btn-submit:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="login-card">
+        <div class="brand-header">
+            <h1 class="brand-title">Webdesk</h1>
+        </div>
+
+        <div id="login_alert" class="alert-box"></div>
+
+        <form id="login_form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label class="form-label" for="username_input">Username</label>
+                <div class="input-wrapper">
+                    <input type="text" id="username_input" class="form-input" placeholder="Username" required autocomplete="username" autofocus>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password_input">Password</label>
+                <div class="input-wrapper">
+                    <input type="password" id="password_input" class="form-input" placeholder="Password" required autocomplete="current-password">
+                    <button type="button" class="toggle-pw-btn" onclick="togglePasswordVisibility()" title="Show/Hide Password">👁️</button>
+                </div>
+            </div>
+
+            <button type="submit" id="btn_submit" class="btn-submit">
+                <div class="spinner" id="btn_spinner"></div>
+                <span id="btn_text">Sign In</span>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        const API_PORT = '6085';
+        const API_HOST = window.location.hostname || '127.0.0.1';
+
+        // Strict HTTPS check - unsecure HTTP logins are strictly disabled
+        function isSecureConnection() {
+            return window.location.protocol === 'https:';
+        }
+
+        async function apiFetch(endpoint, options = {}) {
+            if (!isSecureConnection()) {
+                throw new Error('Insecure connection. HTTPS is strictly required.');
+            }
+            // 1. Primary: Same-origin HTTPS (port 6080)
+            try {
+                const res = await fetch(endpoint, options);
+                if (res.status !== 404 && res.status !== 502) {
+                    return res;
+                }
+            } catch (e) {}
+
+            // 2. Fallback: Direct HTTPS to port 6085
+            const url = `https://${API_HOST}:${API_PORT}${endpoint}`;
+            return await fetch(url, options);
+        }
+
+        function showAlert(msg, isSuccess = false) {
+            const alert = document.getElementById('login_alert');
+            alert.textContent = msg;
+            alert.className = `alert-box ${isSuccess ? 'alert-success' : 'alert-error'}`;
+            alert.style.display = 'block';
+        }
+
+        function hideAlert() {
+            const alert = document.getElementById('login_alert');
+            alert.style.display = 'none';
+        }
+
+        function togglePasswordVisibility() {
+            const pw = document.getElementById('password_input');
+            pw.type = pw.type === 'password' ? 'text' : 'password';
+        }
+
+        function setSubmitting(isSubmitting) {
+            const btn = document.getElementById('btn_submit');
+            const spinner = document.getElementById('btn_spinner');
+            const text = document.getElementById('btn_text');
+
+            btn.disabled = isSubmitting;
+            spinner.style.display = isSubmitting ? 'inline-block' : 'none';
+            text.textContent = isSubmitting ? 'Authenticating...' : 'Sign In';
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            hideAlert();
+
+            if (!isSecureConnection()) {
+                showAlert('Login is disabled over unsecure HTTP. Redirecting to HTTPS...');
+                window.location.replace(window.location.href.replace('http:', 'https:'));
+                return;
+            }
+
+            const username = document.getElementById('username_input').value.trim();
+            const password = document.getElementById('password_input').value;
+
+            if (!username || !password) {
+                showAlert('Please enter username and password.');
+                return;
+            }
+
+            setSubmitting(true);
+
+            try {
+                const res = await apiFetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && (data.ok || data.success) && data.token) {
+                    const uData = data.user || { username: data.username || username, role: data.role || 'user' };
+                    localStorage.setItem('webdesk_token', data.token);
+                    localStorage.setItem('webdesk_username', uData.username || username);
+                    localStorage.setItem('webdesk_role', uData.role || 'user');
+                    if (data.settings) {
+                        try {
+                            localStorage.setItem('webdesk_user_settings', JSON.stringify(data.settings));
+                        } catch(e) {}
+                    }
+
+                    showAlert('Connecting...', true);
+                    setSubmitting(true);
+
+                    setTimeout(() => {
+                        const nextUrl = new URLSearchParams(window.location.search).get('next') || 'index.html';
+                        window.location.href = nextUrl;
+                    }, 400);
+                } else {
+                    showAlert(data.error || 'Invalid username or password.');
+                    setSubmitting(false);
+                    document.getElementById('password_input').select();
+                }
+            } catch (err) {
+                console.error('Login error:', err);
+                showAlert('Authentication service unavailable over HTTPS.');
+                setSubmitting(false);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.location.protocol === 'http:') {
+                window.location.replace(window.location.href.replace('http:', 'https:'));
+                return;
+            }
+            // Always clear previous session data on login page load
+            const hasExplicitToken = new URLSearchParams(window.location.search).get('resume');
+            if (!hasExplicitToken) {
+                localStorage.removeItem('webdesk_token');
+                localStorage.removeItem('webdesk_username');
+                localStorage.removeItem('webdesk_role');
+            }
+        });
+    </script>
+</body>
+</html>

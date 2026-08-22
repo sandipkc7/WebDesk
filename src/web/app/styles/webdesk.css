@@ -1,0 +1,743 @@
+/* ==========================================================================
+   WebDesk Modern UI Theme & Clean Native Canvas Sizing
+   ========================================================================== */
+
+:root {
+  --wd-bg: #0b0f19;
+  --wd-card-bg: rgba(17, 24, 39, 0.9);
+  --wd-border: rgba(255, 255, 255, 0.1);
+  --wd-primary: #06b6d4;
+  --wd-primary-hover: #0891b2;
+  --wd-gradient: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #6366f1 100%);
+  --wd-text: #f3f4f6;
+  --wd-text-muted: #9ca3af;
+  --wd-input-bg: rgba(31, 41, 55, 0.85);
+  --wd-radius: 18px;
+  --wd-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* 1. Hide duplicate left-side noVNC control bar in favor of Draggable Floating Hub */
+#noVNC_control_bar_anchor {
+  display: none !important;
+}
+
+/* 2. Eliminate scrollbars & remove legacy background graphics */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  background-color: #000000 !important;
+  background-image: none !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  color: var(--wd-text) !important;
+}
+
+/* 2. Flat full-screen container with zero rounded corners */
+#noVNC_container {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #000000 !important;
+  border-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-top-left-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+/* 3. Brand Header in Connect / Credentials Dialogs */
+.webdesk-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.webdesk-logo-badge {
+  width: 58px;
+  height: 58px;
+  background: var(--wd-gradient);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px rgba(6, 182, 212, 0.35);
+  margin-bottom: 14px;
+  font-size: 28px;
+}
+
+.webdesk-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: var(--wd-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+.webdesk-subtitle {
+  font-size: 12px;
+  color: var(--wd-text-muted);
+  margin-top: 4px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* 4. Connect Dialog */
+#noVNC_connect_dlg {
+  background: var(--wd-card-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--wd-border) !important;
+  border-radius: var(--wd-radius) !important;
+  box-shadow: var(--wd-shadow) !important;
+  padding: 32px 28px !important;
+  min-width: 320px !important;
+  max-width: 90vw !important;
+  color: var(--wd-text) !important;
+  z-index: 1000 !important;
+}
+
+.noVNC_logo {
+  display: none !important;
+}
+
+#noVNC_connect_button {
+  background: var(--wd-gradient) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  border-radius: 12px !important;
+  padding: 12px 24px !important;
+  border: none !important;
+  box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3) !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+#noVNC_connect_button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 12px 28px rgba(6, 182, 212, 0.45) !important;
+  filter: brightness(1.1) !important;
+}
+
+/* 5. Password Dialog */
+.noVNC_connect_layer {
+  z-index: 9999 !important;
+}
+
+#noVNC_credentials_dlg {
+  background: var(--wd-card-bg) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid var(--wd-border) !important;
+  border-radius: var(--wd-radius) !important;
+  box-shadow: var(--wd-shadow) !important;
+  padding: 30px 28px !important;
+  min-width: 340px !important;
+  max-width: 92vw !important;
+  color: var(--wd-text) !important;
+  position: relative !important;
+  z-index: 10000 !important;
+}
+
+#noVNC_credentials_dlg.noVNC_open {
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+  transform: translateY(0) !important;
+}
+
+#noVNC_credentials_dlg ul {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+#noVNC_credentials_dlg li {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+#noVNC_credentials_dlg label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--wd-text-muted) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+#noVNC_credentials_dlg input[type="text"],
+#noVNC_credentials_dlg input[type="password"] {
+  background: var(--wd-input-bg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+  padding: 12px 16px !important;
+  border-radius: 10px !important;
+  outline: none !important;
+  transition: all 0.2s ease !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+}
+
+#noVNC_credentials_dlg input[type="password"]:focus,
+#noVNC_credentials_dlg input[type="text"]:focus {
+  border-color: var(--wd-primary) !important;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25) !important;
+}
+
+#noVNC_credentials_button {
+  background: var(--wd-gradient) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  border-radius: 10px !important;
+  padding: 12px 20px !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 8px 20px rgba(6, 182, 212, 0.3) !important;
+  transition: all 0.2s ease !important;
+  margin-top: 8px !important;
+  width: 100% !important;
+}
+
+#noVNC_credentials_button:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 12px 28px rgba(6, 182, 212, 0.45) !important;
+  filter: brightness(1.1) !important;
+}
+
+/* 6. Sidebar Control Bar (Auto-collapsed floating tab) */
+#noVNC_control_bar {
+  background: rgba(17, 24, 39, 0.95) !important;
+  backdrop-filter: blur(16px) !important;
+  border-bottom: 1px solid var(--wd-border) !important;
+  z-index: 200 !important;
+}
+
+#noVNC_control_bar_handle {
+  background: rgba(6, 182, 212, 0.4) !important;
+  backdrop-filter: blur(10px) !important;
+  border-radius: 0 8px 8px 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-left: none !important;
+  opacity: 0.7 !important;
+}
+
+#noVNC_control_bar_handle:hover {
+  opacity: 1 !important;
+  background: rgba(6, 182, 212, 0.8) !important;
+}
+
+.noVNC_hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   WebDesk Extended Features: HUD, Drag & Drop, Quick Keys, File Manager
+   ========================================================================== */
+
+/* ==========================================================================
+   WebDesk Draggable Floating Hub (Unified HUD & Quick Actions)
+   ========================================================================== */
+
+#webdesk_hub {
+  display: none !important;
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  user-select: none;
+  flex-direction: column;
+  align-items: flex-end;
+  transition: box-shadow 0.2s ease;
+}
+
+#webdesk_hub.visible {
+  display: flex !important;
+}
+
+/* Draggable Main Pill Handle & Live HUD Metrics */
+#webdesk_hub_handle {
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 30px;
+  padding: 6px 14px 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: grab;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+#webdesk_hub_handle:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+#webdesk_hub_handle:hover {
+  background: rgba(17, 24, 39, 0.96);
+  border-color: var(--wd-primary);
+}
+
+.hub-logo-circle {
+  width: 26px;
+  height: 26px;
+  background: var(--wd-gradient);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.4);
+}
+
+.hub-metrics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f3f4f6;
+  pointer-events: none;
+}
+
+.hub-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.hub-fps { color: #38bdf8; }
+.hub-ping { color: #c084fc; }
+.hub-rate { color: #facc15; }
+.hub-sep { color: rgba(255, 255, 255, 0.25); font-size: 10px; }
+
+/* Expanded Flyout Actions Panel */
+#webdesk_hub_menu {
+  display: none;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 18px;
+  padding: 14px;
+  margin-top: 8px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  width: 290px;
+  flex-direction: column;
+  gap: 10px;
+  animation: flyout 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#webdesk_hub.expanded #webdesk_hub_menu {
+  display: flex !important;
+}
+
+@keyframes flyout {
+  from { opacity: 0; transform: translateY(-8px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.hub-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--wd-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hub-menu-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.hub-menu-close:hover { color: #ffffff; }
+
+/* Modifier & Key Forwarding Toolbar */
+.hub-mod-keys-bar {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mod-key-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 2px;
+  color: #f3f4f6;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.mod-key-btn:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: var(--wd-primary);
+  color: #ffffff;
+}
+
+.mod-key-btn.active {
+  background: var(--wd-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
+  border-color: #38bdf8 !important;
+}
+
+.hub-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.hub-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 4px;
+  color: #f3f4f6;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.hub-btn:hover {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: var(--wd-primary);
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.35);
+}
+
+.hub-btn:active {
+  transform: translateY(0);
+}
+
+.hub-btn-icon {
+  font-size: 18px;
+}
+
+/* 4. Glassmorphism Modal Cards (File Manager & Power Actions) */
+.webdesk-modal-bg {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  z-index: 100000;
+  align-items: center;
+  justify-content: center;
+}
+
+.webdesk-modal-bg.open,
+.webdesk-modal-bg.visible {
+  display: flex !important;
+}
+
+#webdesk_pw_modal {
+  z-index: 100010 !important;
+}
+
+#webdesk_users_modal {
+  z-index: 100002 !important;
+}
+
+#webdesk_file_modal,
+#webdesk_power_modal {
+  z-index: 100001 !important;
+}
+
+.webdesk-modal-card {
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  box-shadow: var(--wd-shadow);
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  color: #ffffff;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.modal-close:hover { color: #ffffff; }
+
+.file-list {
+  overflow-y: auto;
+  flex: 1;
+  max-height: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.file-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.file-item a {
+  color: var(--wd-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.file-item a:hover { text-decoration: underline; }
+
+.power-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.power-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.power-btn:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: var(--wd-primary);
+  transform: translateY(-2px);
+}
+
+.power-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+/* Multi-User Presence & User Badges */
+.hub-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.hub-user-pill.admin { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
+.hub-user-pill.user { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.3); }
+.hub-user-pill.viewer { color: #fde047; border-color: rgba(250, 204, 21, 0.3); }
+
+.hub-viewers-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(6, 182, 212, 0.12);
+  border-radius: 10px;
+  padding: 2px 6px;
+}
+
+/* User Management Table & Form */
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.user-table th, .user-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-table th {
+  color: var(--wd-text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.user-form-group {
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-form-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--wd-text-muted);
+  text-transform: uppercase;
+}
+
+.user-form-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #ffffff;
+  font-size: 13px;
+  outline: none;
+}
+
+.user-form-input:focus {
+  border-color: var(--wd-primary);
+}
+
+.btn-small-danger {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-small-danger:hover { background: #ef4444; color: #fff; }
+
+.btn-small-primary {
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid var(--wd-primary);
+  color: #38bdf8;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-small-primary:hover { background: var(--wd-primary); color: #fff; }
+
+.hub-signout-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.hub-signout-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+.hub-btn-danger {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.hub-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: #ef4444 !important;
+  color: #fca5a5 !important;
+}
+
+/* 🔒 Hardened View-Only / Guest Input Lock */
+body.view-only-mode #noVNC_canvas,
+body.view-only-mode #noVNC_screen,
+body.view-only-mode #noVNC_screen canvas,
+body.view-only-mode #noVNC_container canvas {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: not-allowed !important;
+}
+
+body.view-only-mode #webdesk_dropzone {
+  display: none !important;
+}
+
+body.view-only-mode #hub_mod_bar {
+  display: none !important;
+}

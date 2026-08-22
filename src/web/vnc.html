@@ -1,0 +1,1964 @@
+<!DOCTYPE html>
+<html lang="en" class="noVNC_loading">
+<head>
+
+    <!--
+    noVNC example: simple example using default UI
+    Copyright (C) 2019 The noVNC Authors
+    noVNC is licensed under the MPL 2.0 (see LICENSE.txt)
+    This file is licensed under the 2-Clause BSD license (see LICENSE.txt).
+
+    Connect parameters are provided in query string:
+        http://example.com/?host=HOST&port=PORT&encrypt=1
+    or the fragment:
+        http://example.com/#host=HOST&port=PORT&encrypt=1
+    -->
+    <title>WebDesk - Remote Desktop</title>
+
+    <meta charset="utf-8">
+
+    <!-- Icons (see app/images/icons/Makefile for what the sizes are for) -->
+    <link rel="icon" sizes="16x16" type="image/png" href="app/images/icons/novnc-16x16.png">
+    <link rel="icon" sizes="24x24" type="image/png" href="app/images/icons/novnc-24x24.png">
+    <link rel="icon" sizes="32x32" type="image/png" href="app/images/icons/novnc-32x32.png">
+    <link rel="icon" sizes="48x48" type="image/png" href="app/images/icons/novnc-48x48.png">
+    <link rel="icon" sizes="60x60" type="image/png" href="app/images/icons/novnc-60x60.png">
+    <link rel="icon" sizes="64x64" type="image/png" href="app/images/icons/novnc-64x64.png">
+    <link rel="icon" sizes="72x72" type="image/png" href="app/images/icons/novnc-72x72.png">
+    <link rel="icon" sizes="76x76" type="image/png" href="app/images/icons/novnc-76x76.png">
+    <link rel="icon" sizes="96x96" type="image/png" href="app/images/icons/novnc-96x96.png">
+    <link rel="icon" sizes="120x120" type="image/png" href="app/images/icons/novnc-120x120.png">
+    <link rel="icon" sizes="144x144" type="image/png" href="app/images/icons/novnc-144x144.png">
+    <link rel="icon" sizes="152x152" type="image/png" href="app/images/icons/novnc-152x152.png">
+    <link rel="icon" sizes="192x192" type="image/png" href="app/images/icons/novnc-192x192.png">
+    <!-- Firefox currently mishandles SVG, see #1419039
+    <link rel="icon" sizes="any" type="image/svg+xml" href="app/images/icons/novnc-icon.svg">
+    -->
+    <!-- Repeated last so that legacy handling will pick this -->
+    <link rel="icon" sizes="16x16" type="image/png" href="app/images/icons/novnc-16x16.png">
+
+    <!-- Apple iOS Safari settings -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Home Screen Icons (favourites and bookmarks use the normal icons) -->
+    <link rel="apple-touch-icon" sizes="60x60" type="image/png" href="app/images/icons/novnc-60x60.png">
+    <link rel="apple-touch-icon" sizes="76x76" type="image/png" href="app/images/icons/novnc-76x76.png">
+    <link rel="apple-touch-icon" sizes="120x120" type="image/png" href="app/images/icons/novnc-120x120.png">
+    <link rel="apple-touch-icon" sizes="152x152" type="image/png" href="app/images/icons/novnc-152x152.png">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="app/styles/base.css">
+    <link rel="stylesheet" href="app/styles/webdesk.css">
+
+    <!-- Images that will later appear via CSS -->
+    <link rel="preload" as="image" href="app/images/info.svg">
+    <link rel="preload" as="image" href="app/images/error.svg">
+    <link rel="preload" as="image" href="app/images/warning.svg">
+
+    <script>
+        // Enforce HTTPS - redirect immediately if accessed via unsecure HTTP
+        if (window.location.protocol === 'http:') {
+            window.location.replace(window.location.href.replace('http:', 'https:'));
+        }
+        // Strict Auth Guard - if no token, redirect to login.html immediately before connecting
+        if (!localStorage.getItem('webdesk_token')) {
+            window.location.replace('login.html');
+        }
+    </script>
+    <script src="app/error-handler.js"></script>
+    <script type="module" crossorigin="anonymous" src="app/ui.js"></script>
+    <script type="module">
+        import UI from "./app/ui.js";
+        window.UI = UI;
+    </script>
+</head>
+
+<body>
+
+    <div id="noVNC_fallback_error" class="noVNC_center">
+        <div>
+            <div>noVNC encountered an error:</div>
+            <br>
+            <div id="noVNC_fallback_errormsg"></div>
+        </div>
+    </div>
+
+    <!-- noVNC Control Bar -->
+    <div id="noVNC_control_bar_anchor" class="noVNC_vcenter">
+
+        <div id="noVNC_control_bar">
+            <div id="noVNC_control_bar_handle" title="Hide/Show the control bar"><div></div></div>
+
+            <div class="noVNC_scroll">
+
+            <h1 class="noVNC_logo" translate="no"><span>no</span><br>VNC</h1>
+
+            <!-- Drag/Pan the viewport -->
+            <input type="image" alt="Drag" src="app/images/drag.svg"
+                id="noVNC_view_drag_button" class="noVNC_button noVNC_hidden"
+                title="Move/Drag Viewport">
+
+            <!--noVNC Touch Device only buttons-->
+            <div id="noVNC_mobile_buttons">
+                <input type="image" alt="Keyboard" src="app/images/keyboard.svg"
+                    id="noVNC_keyboard_button" class="noVNC_button" title="Show Keyboard">
+            </div>
+
+            <!-- Extra manual keys -->
+            <input type="image" alt="Extra keys" src="app/images/toggleextrakeys.svg"
+                id="noVNC_toggle_extra_keys_button" class="noVNC_button"
+                title="Show Extra Keys">
+            <div class="noVNC_vcenter">
+            <div id="noVNC_modifiers" class="noVNC_panel">
+                <input type="image" alt="Ctrl" src="app/images/ctrl.svg"
+                    id="noVNC_toggle_ctrl_button" class="noVNC_button"
+                    title="Toggle Ctrl">
+                <input type="image" alt="Alt" src="app/images/alt.svg"
+                    id="noVNC_toggle_alt_button" class="noVNC_button"
+                    title="Toggle Alt">
+                <input type="image" alt="Windows" src="app/images/windows.svg"
+                    id="noVNC_toggle_windows_button" class="noVNC_button"
+                    title="Toggle Windows">
+                <input type="image" alt="Tab" src="app/images/tab.svg"
+                    id="noVNC_send_tab_button" class="noVNC_button"
+                    title="Send Tab">
+                <input type="image" alt="Esc" src="app/images/esc.svg"
+                    id="noVNC_send_esc_button" class="noVNC_button"
+                    title="Send Escape">
+                <input type="image" alt="Ctrl+Alt+Del" src="app/images/ctrlaltdel.svg"
+                    id="noVNC_send_ctrl_alt_del_button" class="noVNC_button"
+                    title="Send Ctrl-Alt-Del">
+            </div>
+            </div>
+
+            <!-- Shutdown/Reboot -->
+            <input type="image" alt="Shutdown/Reboot" src="app/images/power.svg"
+                id="noVNC_power_button" class="noVNC_button"
+                title="Shutdown/Reboot...">
+            <div class="noVNC_vcenter">
+            <div id="noVNC_power" class="noVNC_panel">
+                <div class="noVNC_heading">
+                    <img alt="" src="app/images/power.svg"> Power
+                </div>
+                <input type="button" id="noVNC_shutdown_button" value="Shutdown">
+                <input type="button" id="noVNC_reboot_button" value="Reboot">
+                <input type="button" id="noVNC_reset_button" value="Reset">
+            </div>
+            </div>
+
+            <!-- Clipboard -->
+            <input type="image" alt="Clipboard" src="app/images/clipboard.svg"
+                id="noVNC_clipboard_button" class="noVNC_button"
+                title="Clipboard">
+            <div class="noVNC_vcenter">
+            <div id="noVNC_clipboard" class="noVNC_panel">
+                <div class="noVNC_heading">
+                    <img alt="" src="app/images/clipboard.svg"> Clipboard
+                </div>
+                <textarea id="noVNC_clipboard_text" rows=5></textarea>
+                <br>
+                <input id="noVNC_clipboard_clear_button" type="button"
+                    value="Clear" class="noVNC_submit">
+            </div>
+            </div>
+
+            <!-- Toggle fullscreen -->
+            <input type="image" alt="Fullscreen" src="app/images/fullscreen.svg"
+                id="noVNC_fullscreen_button" class="noVNC_button noVNC_hidden"
+                title="Fullscreen">
+
+            <!-- Settings -->
+            <input type="image" alt="Settings" src="app/images/settings.svg"
+                id="noVNC_settings_button" class="noVNC_button"
+                title="Settings">
+            <div class="noVNC_vcenter">
+            <div id="noVNC_settings" class="noVNC_panel">
+                <ul>
+                    <li class="noVNC_heading">
+                        <img alt="" src="app/images/settings.svg"> Settings
+                    </li>
+                    <li>
+                        <label><input id="noVNC_setting_shared" type="checkbox"> Shared Mode</label>
+                    </li>
+                    <li>
+                        <label><input id="noVNC_setting_view_only" type="checkbox"> View Only</label>
+                    </li>
+                    <li><hr></li>
+                    <li>
+                        <label><input id="noVNC_setting_view_clip" type="checkbox"> Clip to Window</label>
+                    </li>
+                    <li>
+                        <label for="noVNC_setting_resize">Scaling Mode:</label>
+                        <select id="noVNC_setting_resize" name="vncResize">
+                            <option value="off">None</option>
+                            <option value="scale">Local Scaling</option>
+                            <option value="remote">Remote Resizing</option>
+                        </select>
+                    </li>
+                    <li><hr></li>
+                    <li>
+                        <div class="noVNC_expander">Advanced</div>
+                        <div><ul>
+                            <li>
+                                <label for="noVNC_setting_quality">Quality:</label>
+                                <input id="noVNC_setting_quality" type="range" min="0" max="9" value="6">
+                            </li>
+                            <li>
+                                <label for="noVNC_setting_compression">Compression level:</label>
+                                <input id="noVNC_setting_compression" type="range" min="0" max="9" value="2">
+                            </li>
+                            <li><hr></li>
+                            <li>
+                                <label for="noVNC_setting_repeaterID">Repeater ID:</label>
+                                <input id="noVNC_setting_repeaterID" type="text" value="">
+                            </li>
+                            <li>
+                                <div class="noVNC_expander">WebSocket</div>
+                                <div><ul>
+                                    <li>
+                                        <label><input id="noVNC_setting_encrypt" type="checkbox"> Encrypt</label>
+                                    </li>
+                                    <li>
+                                        <label for="noVNC_setting_host">Host:</label>
+                                        <input id="noVNC_setting_host">
+                                    </li>
+                                    <li>
+                                        <label for="noVNC_setting_port">Port:</label>
+                                        <input id="noVNC_setting_port" type="number">
+                                    </li>
+                                    <li>
+                                        <label for="noVNC_setting_path">Path:</label>
+                                        <input id="noVNC_setting_path" type="text" value="websockify">
+                                    </li>
+                                </ul></div>
+                            </li>
+                            <li><hr></li>
+                            <li>
+                                <label><input id="noVNC_setting_reconnect" type="checkbox"> Automatic Reconnect</label>
+                            </li>
+                            <li>
+                                <label for="noVNC_setting_reconnect_delay">Reconnect Delay (ms):</label>
+                                <input id="noVNC_setting_reconnect_delay" type="number">
+                            </li>
+                            <li><hr></li>
+                            <li>
+                                <label><input id="noVNC_setting_show_dot" type="checkbox"> Show Dot when No Cursor</label>
+                            </li>
+                            <li><hr></li>
+                            <!-- Logging selection dropdown -->
+                            <li>
+                                <label>Logging:
+                                    <select id="noVNC_setting_logging" name="vncLogging">
+                                    </select>
+                                </label>
+                            </li>
+                        </ul></div>
+                    </li>
+                    <li class="noVNC_version_separator"><hr></li>
+                    <li class="noVNC_version_wrapper">
+                        <span>Version:</span>
+                        <span class="noVNC_version"></span>
+                    </li>
+                </ul>
+            </div>
+            </div>
+
+            <!-- Connection Controls -->
+            <input type="image" alt="Disconnect" src="app/images/disconnect.svg"
+                id="noVNC_disconnect_button" class="noVNC_button"
+                title="Disconnect">
+
+            </div>
+        </div>
+
+        <div id="noVNC_control_bar_hint"></div>
+
+    </div> <!-- End of noVNC_control_bar -->
+
+    <!-- Status Dialog -->
+    <div id="noVNC_status"></div>
+
+    <!-- Connect button -->
+    <div class="noVNC_center">
+        <div id="noVNC_connect_dlg">
+            <div class="webdesk-brand">
+                <div class="webdesk-logo-badge">🖥️</div>
+                <h2 class="webdesk-title">WebDesk</h2>
+                <span class="webdesk-subtitle">Encrypted Remote Desktop Session</span>
+            </div>
+            <div id="noVNC_connect_button"><div>
+                <img alt="" src="app/images/connect.svg"> Connect Session
+            </div></div>
+        </div>
+    </div>
+
+    <!-- Password Dialog -->
+    <div class="noVNC_center noVNC_connect_layer">
+    <div id="noVNC_credentials_dlg" class="noVNC_panel"><form>
+        <div class="webdesk-brand">
+            <div class="webdesk-logo-badge">🔒</div>
+            <h2 class="webdesk-title">Authentication</h2>
+            <span class="webdesk-subtitle">Enter password to unlock desktop</span>
+        </div>
+        <ul>
+            <li id="noVNC_username_block">
+                <label>Username</label>
+                <input id="noVNC_username_input">
+            </li>
+            <li id="noVNC_password_block">
+                <label>Session Password</label>
+                <input id="noVNC_password_input" type="password" placeholder="Enter password...">
+            </li>
+            <li>
+                <input id="noVNC_credentials_button" type="submit" value="Unlock &amp; Connect" class="noVNC_submit">
+            </li>
+        </ul>
+    </form></div>
+    </div>
+
+    <!-- Transition Screens -->
+    <div id="noVNC_transition">
+        <div id="noVNC_transition_text"></div>
+        <div>
+        <input type="button" id="noVNC_cancel_reconnect_button" value="Cancel" class="noVNC_submit">
+        </div>
+        <div class="noVNC_spinner"></div>
+    </div>
+
+    <!-- This is where the RFB elements will attach -->
+    <div id="noVNC_container">
+        <!-- Note that Google Chrome on Android doesn't respect any of these,
+             html attributes which attempt to disable text suggestions on the
+             on-screen keyboard. Let's hope Chrome implements the ime-mode
+             style for example -->
+        <textarea id="noVNC_keyboardinput" autocapitalize="off"
+            autocomplete="off" spellcheck="false" tabindex="-1"></textarea>
+    </div>
+
+    <audio id="noVNC_bell">
+        <source src="app/sounds/bell.oga" type="audio/ogg">
+        <source src="app/sounds/bell.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- Unified Draggable Floating Hub (HUD & Quick Actions) -->
+    <div id="webdesk_hub">
+        <!-- Draggable Main Pill Handle & Live HUD Metrics -->
+        <div id="webdesk_hub_handle" title="Drag anywhere • Click to open tools">
+            <div class="hub-logo-circle">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff;">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+            </div>
+            <div class="hub-metrics">
+                <span class="hub-dot"></span>
+                <span id="hub_fps" class="hub-fps">60 FPS</span>
+                <span class="hub-sep">•</span>
+                <span id="hub_ping" class="hub-ping">-- ms</span>
+                <span class="hub-sep">•</span>
+                <span id="hub_rate" class="hub-rate">-- KB/s</span>
+            </div>
+        </div>
+
+        <!-- Expanded Flyout Actions Panel -->
+        <div id="webdesk_hub_menu">
+            <div class="hub-menu-header">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span id="hub_user_pill" class="hub-user-pill user">👤 User</span>
+                    <span id="hub_viewers_badge" class="hub-viewers-badge" title="Active Connected Viewers">👥 1</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <button class="hub-signout-btn" onclick="window.WebDeskAuth.logout()" title="Sign Out of WebDesk">
+                        <span>🚪</span>
+                        <span style="font-size: 11px; font-weight: 700;">Sign Out</span>
+                    </button>
+                    <button class="hub-menu-close" onclick="window.WebDeskHub.toggle(false)">✕</button>
+                </div>
+            </div>
+
+            <!-- Modifier & Special Key Toggles (Ctrl, Alt, Shift, Win, Esc, Tab, CAD) -->
+            <div class="hub-mod-keys-bar" id="hub_mod_bar">
+                <button class="mod-key-btn" id="mod_ctrl" onclick="window.WebDeskKeyForwarder.toggleModifier('ControlLeft', 0xffe3)" title="Latch / Forward Ctrl Key">Ctrl</button>
+                <button class="mod-key-btn" id="mod_alt" onclick="window.WebDeskKeyForwarder.toggleModifier('AltLeft', 0xffe9)" title="Latch / Forward Alt Key">Alt</button>
+                <button class="mod-key-btn" id="mod_shift" onclick="window.WebDeskKeyForwarder.toggleModifier('ShiftLeft', 0xffe1)" title="Latch / Forward Shift Key">Shift</button>
+                <button class="mod-key-btn" id="mod_super" onclick="window.WebDeskKeyForwarder.toggleModifier('MetaLeft', 0xffeb)" title="Latch / Forward Windows Key">Win</button>
+                <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff1b, 'Escape')" title="Send Escape Key">Esc</button>
+                <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff09, 'Tab')" title="Send Tab Key">Tab</button>
+                <button class="mod-key-btn" onclick="window.WebDeskKeys.sendCtrlAltDel()" title="Send Ctrl+Alt+Del">CAD</button>
+            </div>
+
+            <div class="hub-actions-grid" id="hub_actions_grid">
+                <button class="hub-btn" id="btn_start" onclick="window.WebDeskKeys.send('Super_L'); window.WebDeskHub.toggle(false)" title="Open Start Menu">
+                    <span class="hub-btn-icon">🪟</span>
+                    <span>Start</span>
+                </button>
+                <button class="hub-btn" id="btn_alttab" onclick="window.WebDeskKeys.send('alt+Tab'); window.WebDeskHub.toggle(false)" title="Switch Windows (Alt+Tab)">
+                    <span class="hub-btn-icon">🔀</span>
+                    <span>Alt+Tab</span>
+                </button>
+                <button class="hub-btn" id="btn_term" onclick="window.WebDeskKeys.send('ctrl+alt+t'); window.WebDeskHub.toggle(false)" title="Open Terminal">
+                    <span class="hub-btn-icon">💻</span>
+                    <span>Terminal</span>
+                </button>
+                <button class="hub-btn" id="btn_files" onclick="window.WebDeskFiles.openModal(); window.WebDeskHub.toggle(false)" title="File Transfers">
+                    <span class="hub-btn-icon">📁</span>
+                    <span>Files</span>
+                </button>
+                <button class="hub-btn" id="btn_clipboard" onclick="window.WebDeskClipboard.openModal(); window.WebDeskHub.toggle(false)" title="Manual Clipboard">
+                    <span class="hub-btn-icon">📋</span>
+                    <span>Clipboard</span>
+                </button>
+                <button class="hub-btn" id="hub_btn_audio" onclick="window.WebDeskAudio.toggle()" title="Toggle Sound">
+                    <span class="hub-btn-icon">🔊</span>
+                    <span>Audio</span>
+                </button>
+                <button class="hub-btn" id="btn_match_res" onclick="window.WebDeskRes.sync(); window.WebDeskHub.toggle(false)" title="Match Resolution">
+                    <span class="hub-btn-icon">🎯</span>
+                    <span>Match Res</span>
+                </button>
+                <button class="hub-btn" id="btn_settings" onclick="window.WebDeskSettings.openModal(); window.WebDeskHub.toggle(false)" title="Display & Scaling Settings">
+                    <span class="hub-btn-icon">⚙️</span>
+                    <span>Display</span>
+                </button>
+                <button class="hub-btn" id="btn_fullscreen" onclick="window.WebDeskHub.toggleFullscreen(); window.WebDeskHub.toggle(false)" title="Toggle Fullscreen">
+                    <span class="hub-btn-icon">⛶</span>
+                    <span>Fullscreen</span>
+                </button>
+                <button class="hub-btn" id="btn_view_only" onclick="window.WebDeskViewOnly.toggle()" title="Toggle View Mode">
+                    <span class="hub-btn-icon">👁️</span>
+                    <span>View Only</span>
+                </button>
+                <button class="hub-btn" id="btn_change_pw" onclick="window.WebDeskAuth.openPasswordModal(); window.WebDeskHub.toggle(false)" title="Change Password">
+                    <span class="hub-btn-icon">🔑</span>
+                    <span>Password</span>
+                </button>
+                <button class="hub-btn" id="btn_manage_users" onclick="window.WebDeskAuth.openUsersModal(); window.WebDeskHub.toggle(false)" title="Manage Users">
+                    <span class="hub-btn-icon">👥</span>
+                    <span>Users</span>
+                </button>
+                <button class="hub-btn" id="btn_power" onclick="window.WebDeskPower.openModal(); window.WebDeskHub.toggle(false)" title="Power & Lock" style="display: none;">
+                    <span class="hub-btn-icon">🔒</span>
+                    <span>Power</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drag & Drop Upload Overlay -->
+    <div id="webdesk_dropzone">
+        <div class="drop-icon">📥</div>
+        <h2>Drop Files to Upload</h2>
+        <p>Files will be saved directly into Linux ~/Downloads</p>
+    </div>
+
+    <!-- Display & Scaling Settings Modal -->
+    <div class="webdesk-modal-bg" id="webdesk_settings_modal">
+        <div class="webdesk-modal-card" style="width: 420px; max-width: 95vw;">
+            <div class="modal-header">
+                <h3>⚙️ Display &amp; Performance Preferences</h3>
+                <button class="modal-close" onclick="window.WebDeskSettings.closeModal()">✕</button>
+            </div>
+            <div class="user-form-group">
+                <label class="user-form-label">Client Canvas Scaling</label>
+                <select id="hub_setting_scaling" class="user-form-input" style="background: #0f172a;" onchange="window.WebDeskSettings.updateScaling(this.value)">
+                    <option value="scale">Local Scaling (Fit Window)</option>
+                    <option value="remote">Remote Resizing</option>
+                    <option value="off">None (1:1 Native Resolution)</option>
+                </select>
+            </div>
+            <div class="user-form-group">
+                <label class="user-form-label">Performance &amp; Speed Profile</label>
+                <select id="hub_setting_profile" class="user-form-input" style="background: #0f172a;" onchange="window.WebDeskSettings.updateProfile(this.value)">
+                    <option value="ultra_fast">⚡ Ultra Fast (60 FPS / Ultra-Low Latency)</option>
+                    <option value="balanced" selected>⚖️ Balanced (Recommended / 30-45 FPS)</option>
+                    <option value="high_quality">🎨 High Quality (Lossless / Crisp Text)</option>
+                    <option value="low_bandwidth">📉 Low Bandwidth (Eco / Slow Network)</option>
+                </select>
+            </div>
+            <div class="user-form-group">
+                <label class="user-form-label" style="display:flex; justify-content:space-between;">
+                    <span>JPEG Quality (0–9)</span>
+                    <span id="val_quality" style="color:var(--wd-primary); font-weight:bold;">6</span>
+                </label>
+                <input type="range" id="hub_setting_quality" min="0" max="9" value="6" class="user-form-input" style="padding:0;" oninput="window.WebDeskSettings.updateQuality(this.value)">
+            </div>
+            <div class="user-form-group">
+                <label class="user-form-label" style="display:flex; justify-content:space-between;">
+                    <span>Compression Level (0–9)</span>
+                    <span id="val_compression" style="color:var(--wd-primary); font-weight:bold;">2</span>
+                </label>
+                <input type="range" id="hub_setting_compression" min="0" max="9" value="2" class="user-form-input" style="padding:0;" oninput="window.WebDeskSettings.updateCompression(this.value)">
+            </div>
+            <button class="btn-small-primary" style="width:100%; padding:10px; margin-top:8px; font-weight:bold;" onclick="window.WebDeskSettings.savePreferences()">💾 Save &amp; Apply Preferences</button>
+        </div>
+    </div>
+
+    <!-- Manual Clipboard Modal -->
+    <div class="webdesk-modal-bg" id="webdesk_clipboard_modal">
+        <div class="webdesk-modal-card" style="width: 440px; max-width: 95vw;">
+            <div class="modal-header">
+                <h3>📋 Remote Clipboard</h3>
+                <button class="modal-close" onclick="window.WebDeskClipboard.closeModal()">✕</button>
+            </div>
+            <p style="font-size: 12px; color: var(--wd-text-muted); margin-top: 0;">Type or paste text below to transfer between your device and the remote Linux desktop.</p>
+            <textarea id="hub_clipboard_textarea" rows="6" class="user-form-input" placeholder="Type or paste text here..." style="width: 100%; font-family: monospace; font-size: 12px; box-sizing: border-box;"></textarea>
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+                <button class="btn-small-primary" style="flex: 1; padding: 8px;" onclick="window.WebDeskClipboard.pasteToRemote()">📥 Paste to Desktop</button>
+                <button class="btn-small-primary" style="flex: 1; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);" onclick="window.WebDeskClipboard.copyFromRemote()">📋 Read Remote Text</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Change Modal -->
+    <div class="webdesk-modal-bg" id="webdesk_pw_modal">
+        <div class="webdesk-modal-card" style="width: 350px;">
+            <div class="modal-header">
+                <h3>🔑 Change Password</h3>
+                <button class="modal-close" onclick="window.WebDeskAuth.closePasswordModal()">✕</button>
+            </div>
+            <div id="pw_modal_alert" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;"></div>
+            
+            <form onsubmit="window.WebDeskAuth.submitChangePassword(event)">
+                <div class="user-form-group" id="group_target_user" style="display: none;">
+                    <label class="user-form-label">User</label>
+                    <input type="text" id="pw_target_user" class="user-form-input" readonly>
+                </div>
+                <div class="user-form-group" id="group_old_pw">
+                    <label class="user-form-label">Current Password</label>
+                    <input type="password" id="pw_old_val" class="user-form-input" placeholder="Current password">
+                </div>
+                <div class="user-form-group">
+                    <label class="user-form-label">New Password</label>
+                    <input type="password" id="pw_new_val" class="user-form-input" placeholder="At least 4 characters" required>
+                </div>
+                <div class="user-form-group">
+                    <label class="user-form-label">Confirm New Password</label>
+                    <input type="password" id="pw_confirm_val" class="user-form-input" placeholder="Re-enter new password" required>
+                </div>
+                <button type="submit" id="btn_save_pw" class="btn-small-primary" style="width: 100%; padding: 10px; margin-top: 6px; font-weight: bold;">Update Password</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Management Modal (Admin Only) -->
+    <div class="webdesk-modal-bg" id="webdesk_users_modal">
+        <div class="webdesk-modal-card" style="width: 580px; max-width: 95vw;">
+            <div class="modal-header">
+                <h3>👥 Web Accounts (Admin)</h3>
+                <button class="modal-close" onclick="window.WebDeskAuth.closeUsersModal()">✕</button>
+            </div>
+            <div id="users_modal_alert" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-bottom: 12px;"></div>
+            
+            <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 14px;">
+                <h4 style="font-size: 12px; margin-bottom: 8px; color: var(--wd-primary);">+ Add New Web User</h4>
+                <div style="display: grid; grid-template-columns: 1.2fr 1.2fr 1fr auto; gap: 6px;">
+                    <input type="text" id="new_u_name" class="user-form-input" placeholder="Username" style="padding: 6px;">
+                    <input type="password" id="new_u_pass" class="user-form-input" placeholder="Password" style="padding: 6px;">
+                    <select id="new_u_role" class="user-form-input" style="padding: 6px; background: #0f172a;">
+                        <option value="user">User</option>
+                        <option value="viewer">Guest (View)</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button class="btn-small-primary" onclick="window.WebDeskAuth.submitAddUser()">Add</button>
+                </div>
+            </div>
+
+            <div style="max-height: 260px; overflow-y: auto;">
+                <table class="user-table" id="users_table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users_tbody">
+                        <tr><td colspan="4" style="text-align: center; color: #9ca3af;">Loading accounts...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Manager Modal -->
+    <div class="webdesk-modal-bg" id="webdesk_file_modal">
+        <div class="webdesk-modal-card">
+            <div class="modal-header">
+                <h3>📁 Remote Downloads (~/Downloads)</h3>
+                <button class="modal-close" onclick="window.WebDeskFiles.closeModal()">✕</button>
+            </div>
+            <p style="font-size: 12px; color: var(--wd-text-muted); margin-top: 0;">Drag and drop any file onto this browser window to upload. Click below to download files back to your PC.</p>
+            <div class="file-list" id="webdesk_file_list">
+                <div style="text-align: center; color: #9ca3af; padding: 20px;">Loading files...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Power & Lock Actions Modal -->
+    <div class="webdesk-modal-bg" id="webdesk_power_modal">
+        <div class="webdesk-modal-card" style="width: 380px;">
+            <div class="modal-header">
+                <h3>🔒 Remote Session &amp; Power</h3>
+                <button class="modal-close" onclick="window.WebDeskPower.closeModal()">✕</button>
+            </div>
+            <div class="power-grid">
+                <button class="power-btn" onclick="window.WebDeskPower.action('lock')">
+                    <span style="font-size: 24px;">🔒</span>
+                    Lock Screen
+                </button>
+                <button class="power-btn" onclick="window.WebDeskPower.action('switch-user')">
+                    <span style="font-size: 24px;">👥</span>
+                    Switch User
+                </button>
+                <button class="power-btn" onclick="window.WebDeskPower.action('logout')">
+                    <span style="font-size: 24px;">🚪</span>
+                    Log Out Session
+                </button>
+                <button class="power-btn" onclick="window.WebDeskPower.action('suspend')">
+                    <span style="font-size: 24px;">🌙</span>
+                    Sleep / Suspend
+                </button>
+                <button class="power-btn danger" onclick="window.WebDeskPower.action('reboot')">
+                    <span style="font-size: 24px;">🔄</span>
+                    Reboot VM
+                </button>
+                <button class="power-btn danger" onclick="window.WebDeskPower.action('poweroff')">
+                    <span style="font-size: 24px;">⏹</span>
+                    Power Off VM
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Enforce full-screen viewport scaling and instant auto-reconnect
+        try {
+            localStorage.setItem('noVNC_resize', 'scale');
+            localStorage.setItem('noVNC_view_clip', 'false');
+            localStorage.setItem('noVNC_reconnect', 'true');
+            localStorage.setItem('noVNC_reconnect_delay', '1000');
+        } catch(e) {}
+
+        const API_PORT = '6085';
+        const API_HOST = window.location.hostname || '127.0.0.1';
+
+        async function apiFetch(endpoint, options = {}) {
+            if (window.location.protocol !== 'https:') {
+                window.location.replace(window.location.href.replace('http:', 'https:'));
+                throw new Error('Insecure connection. HTTPS is strictly required.');
+            }
+            // 1. Primary: Same-origin HTTPS (port 6080)
+            try {
+                const res = await fetch(endpoint, options);
+                if (res.status !== 404 && res.status !== 502) {
+                    return res;
+                }
+            } catch (e) {}
+
+            // 2. Fallback: Direct HTTPS to port 6085
+            const res = await fetch(`https://${API_HOST}:${API_PORT}${endpoint}`, options);
+            return res;
+        }
+
+        // WebDesk User Authentication, RBAC & Presence Engine
+        window.WebDeskAuth = {
+            user: null,
+            token: localStorage.getItem('webdesk_token') || '',
+
+            async init() {
+                if (!this.token) {
+                    window.location.href = 'login.html';
+                    return false;
+                }
+
+                try {
+                    const res = await apiFetch('/api/auth/me', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+                    if (!res.ok) {
+                        localStorage.removeItem('webdesk_token');
+                        window.location.href = 'login.html';
+                        return false;
+                    }
+                    const data = await res.json();
+                    this.user = data.user || data;
+                    this.applyRolePermissions();
+                    this.startHeartbeat();
+                    return true;
+                } catch(e) {
+                    console.error('Auth verification failed:', e);
+                    return true;
+                }
+            },
+
+            applyRolePermissions() {
+                const role = (this.user && this.user.role) ? this.user.role : (localStorage.getItem('webdesk_role') || 'user');
+                const uname = (this.user && this.user.username) ? this.user.username : (localStorage.getItem('webdesk_username') || 'user');
+
+                const pill = document.getElementById('hub_user_pill');
+                if (pill) {
+                    const icon = role === 'admin' ? '👑' : (role === 'viewer' || role === 'guest' ? '👁️' : '👤');
+                    pill.textContent = `${icon} ${uname}`;
+                    pill.className = `hub-user-pill ${role}`;
+                }
+
+                // 1. Guest / Viewer: Total Input Lock (Mouse + Keyboard + Dropzone + Shortcuts)
+                if (role === 'viewer' || role === 'guest') {
+                    document.body.classList.add('view-only-mode');
+                    localStorage.setItem('noVNC_view_only', 'true');
+                    
+                    const enforceRfbViewOnly = () => {
+                        if (window.UI) {
+                            try { window.UI.forceSetting('view_only', true); } catch(e) {}
+                            if (window.UI.rfb) {
+                                window.UI.rfb.viewOnly = true;
+                            }
+                        }
+                    };
+                    enforceRfbViewOnly();
+                    setInterval(enforceRfbViewOnly, 1000);
+
+                    const hideIds = ['btn_start', 'btn_alttab', 'btn_term', 'btn_files', 'btn_match_res', 'btn_change_pw', 'btn_manage_users', 'btn_power', 'hub_mod_bar', 'webdesk_dropzone'];
+                    hideIds.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                    const btnView = document.getElementById('btn_view_only');
+                    if (btnView) {
+                        btnView.classList.add('active');
+                        btnView.style.pointerEvents = 'none';
+                    }
+                } else {
+                    document.body.classList.remove('view-only-mode');
+                    localStorage.setItem('noVNC_view_only', 'false');
+                    if (window.UI && window.UI.rfb) {
+                        window.UI.rfb.viewOnly = false;
+                    }
+                }
+
+                // 2. Standard User: Interactive, Own Password Only, No Power Actions
+                if (role === 'user') {
+                    const powerBtn = document.getElementById('btn_power');
+                    if (powerBtn) powerBtn.style.display = 'none';
+                    const usersBtn = document.getElementById('btn_manage_users');
+                    if (usersBtn) usersBtn.style.display = 'none';
+                    const pwBtn = document.getElementById('btn_change_pw');
+                    if (pwBtn) pwBtn.style.display = 'flex';
+                }
+
+                // 3. Admin: Full Permissions + User Management + Power Controls
+                if (role === 'admin') {
+                    const powerBtn = document.getElementById('btn_power');
+                    if (powerBtn) powerBtn.style.display = 'flex';
+                    const usersBtn = document.getElementById('btn_manage_users');
+                    if (usersBtn) usersBtn.style.display = 'flex';
+                    const pwBtn = document.getElementById('btn_change_pw');
+                    if (pwBtn) pwBtn.style.display = 'flex';
+                }
+            },
+
+            startHeartbeat() {
+                const sendHeartbeat = async () => {
+                    if (!this.token) return;
+                    try {
+                        const hRes = await apiFetch('/api/auth/heartbeat', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${this.token}` }
+                        });
+                        if (hRes.status === 401) {
+                            // User was kicked or suspended
+                            this.logout('Session terminated by administrator.');
+                            return;
+                        }
+                        const res = await apiFetch('/api/auth/viewers', {
+                            headers: { 'Authorization': `Bearer ${this.token}` }
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            const badge = document.getElementById('hub_viewers_badge');
+                            if (badge) {
+                                badge.textContent = `👥 ${data.count || 1}`;
+                                const listStr = data.viewers ? data.viewers.map(v => `${v.username} (${v.role})`).join(', ') : '';
+                                badge.title = `Active Connected Viewers: ${listStr}`;
+                            }
+                        }
+                    } catch(e) {}
+                };
+
+                sendHeartbeat();
+                setInterval(sendHeartbeat, 5000);
+            },
+
+            openPasswordModal(targetUser) {
+                if (this.user && (this.user.role === 'viewer' || this.user.role === 'guest')) {
+                    if (window.WebDeskRes) window.WebDeskRes.showToast('⚠️ Guest accounts cannot change passwords.');
+                    return;
+                }
+
+                const modal = document.getElementById('webdesk_pw_modal');
+                const alertBox = document.getElementById('pw_modal_alert');
+                const targetGroup = document.getElementById('group_target_user');
+                const oldGroup = document.getElementById('group_old_pw');
+                const targetInput = document.getElementById('pw_target_user');
+
+                if (!modal) return;
+                alertBox.style.display = 'none';
+                document.getElementById('pw_new_val').value = '';
+                document.getElementById('pw_confirm_val').value = '';
+                document.getElementById('pw_old_val').value = '';
+
+                targetUser = targetUser || (this.user ? this.user.username : 'user');
+                targetInput.value = targetUser;
+
+                if (this.user && this.user.role === 'admin') {
+                    oldGroup.style.display = 'none';
+                    targetGroup.style.display = 'block';
+                } else {
+                    oldGroup.style.display = 'block';
+                    targetGroup.style.display = 'none';
+                }
+
+                modal.classList.add('open');
+                modal.classList.add('visible');
+
+                setTimeout(() => {
+                    if (this.user && this.user.role === 'admin') {
+                        document.getElementById('pw_new_val').focus();
+                    } else {
+                        document.getElementById('pw_old_val').focus();
+                    }
+                }, 100);
+            },
+
+            closePasswordModal() {
+                const modal = document.getElementById('webdesk_pw_modal');
+                if (modal) {
+                    modal.classList.remove('open');
+                    modal.classList.remove('visible');
+                }
+            },
+
+            async submitChangePassword(e) {
+                e.preventDefault();
+                const alertBox = document.getElementById('pw_modal_alert');
+                const targetUser = document.getElementById('pw_target_user').value || (this.user ? this.user.username : '');
+                const oldPassword = document.getElementById('pw_old_val').value;
+                const newPassword = document.getElementById('pw_new_val').value;
+                const confirmPassword = document.getElementById('pw_confirm_val').value;
+
+                if (newPassword !== confirmPassword) {
+                    alertBox.textContent = 'New passwords do not match.';
+                    alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                    alertBox.style.color = '#fca5a5';
+                    alertBox.style.display = 'block';
+                    return;
+                }
+
+                try {
+                    const res = await apiFetch('/api/auth/change-password', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({
+                            target_user: targetUser,
+                            new_password: newPassword,
+                            old_password: oldPassword || null
+                        })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        alertBox.textContent = data.message || 'Password updated successfully!';
+                        alertBox.style.background = 'rgba(34, 197, 94, 0.2)';
+                        alertBox.style.color = '#86efac';
+                        alertBox.style.display = 'block';
+                        setTimeout(() => {
+                            this.closePasswordModal();
+                            this.loadUsersTable();
+                        }, 1200);
+                    } else {
+                        alertBox.textContent = data.error || 'Failed to update password.';
+                        alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                        alertBox.style.color = '#fca5a5';
+                        alertBox.style.display = 'block';
+                    }
+                } catch(err) {
+                    alertBox.textContent = 'Server communication error.';
+                    alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                    alertBox.style.color = '#fca5a5';
+                    alertBox.style.display = 'block';
+                }
+            },
+
+            async openUsersModal() {
+                const modal = document.getElementById('webdesk_users_modal');
+                if (!modal) return;
+                modal.classList.add('open');
+                modal.classList.add('visible');
+                this.loadUsersTable();
+            },
+
+            closeUsersModal() {
+                const modal = document.getElementById('webdesk_users_modal');
+                if (modal) {
+                    modal.classList.remove('open');
+                    modal.classList.remove('visible');
+                }
+            },
+
+            async loadUsersTable() {
+                const tbody = document.getElementById('users_tbody');
+                if (!tbody) return;
+                try {
+                    const res = await apiFetch('/api/auth/users', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        tbody.innerHTML = '';
+                        (data.users || []).forEach(u => {
+                            const tr = document.createElement('tr');
+                            const roleBadge = `<span class="hub-user-pill ${u.role}" style="padding: 2px 6px; font-size: 10px;">${u.role}</span>`;
+                            const isSuspended = u.status === 'suspended';
+                            const statusBadge = isSuspended 
+                                ? `<span style="color: #f87171; font-weight: bold; font-size: 11px;">⏸️ Suspended</span>` 
+                                : `<span style="color: #4ade80; font-weight: bold; font-size: 11px;">🟢 Active</span>`;
+                            const isSelf = this.user && this.user.username === u.username;
+                            const isPrimaryAdmin = u.username === 'admin';
+
+                            tr.innerHTML = `
+                                <td style="font-weight: bold;">${u.username}</td>
+                                <td>${roleBadge}</td>
+                                <td>${statusBadge}</td>
+                                <td style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                    <button class="btn-small-primary" onclick="window.WebDeskAuth.openPasswordModal('${u.username}')" title="Change Password">🔑</button>
+                                    ${!isPrimaryAdmin ? (isSuspended 
+                                        ? `<button class="btn-small-primary" onclick="window.WebDeskAuth.unsuspendUser('${u.username}')" title="Reactivate Account">▶️ Unsuspend</button>` 
+                                        : `<button class="btn-small-danger" onclick="window.WebDeskAuth.suspendUser('${u.username}')" title="Suspend User & Block Login">⏸️ Suspend</button>`) : ''}
+                                    ${!isSelf ? `<button class="btn-small-danger" onclick="window.WebDeskAuth.kickUser('${u.username}')" title="Terminate active session">⚡ Kick</button>` : ''}
+                                    ${!isPrimaryAdmin && !isSelf ? `<button class="btn-small-danger" onclick="window.WebDeskAuth.deleteUser('${u.username}')" title="Delete User">🗑️</button>` : ''}
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                } catch(e) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="color: #fca5a5; text-align: center;">Error loading users.</td></tr>`;
+                }
+            },
+
+            async suspendUser(username) {
+                if (!confirm(`Suspend user '${username}'? They will be immediately disconnected and blocked from logging in.`)) return;
+                try {
+                    const res = await apiFetch('/api/auth/users/suspend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        this.loadUsersTable();
+                    } else {
+                        alert(data.error || 'Failed to suspend user.');
+                    }
+                } catch(e) {
+                    alert('Error communicating with server.');
+                }
+            },
+
+            async unsuspendUser(username) {
+                try {
+                    const res = await apiFetch('/api/auth/users/unsuspend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        this.loadUsersTable();
+                    } else {
+                        alert(data.error || 'Failed to activate user.');
+                    }
+                } catch(e) {
+                    alert('Error communicating with server.');
+                }
+            },
+
+            async kickUser(username) {
+                if (!confirm(`Terminate live session for '${username}'?`)) return;
+                try {
+                    const res = await apiFetch('/api/auth/users/kick', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.token}` },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        this.loadUsersTable();
+                    } else {
+                        alert(data.error || 'Failed to terminate session.');
+                    }
+                } catch(e) {
+                    alert('Error communicating with server.');
+                }
+            },
+
+            async submitAddUser() {
+                const alertBox = document.getElementById('users_modal_alert');
+                const u = document.getElementById('new_u_name').value.trim();
+                const p = document.getElementById('new_u_pass').value;
+                const r = document.getElementById('new_u_role').value;
+
+                if (!u || !p) {
+                    alertBox.textContent = 'Username and password required.';
+                    alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                    alertBox.style.color = '#fca5a5';
+                    alertBox.style.display = 'block';
+                    return;
+                }
+
+                try {
+                    const res = await apiFetch('/api/auth/users/add', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({ username: u, password: p, role: r })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        alertBox.textContent = `User '${u}' created successfully!`;
+                        alertBox.style.background = 'rgba(34, 197, 94, 0.2)';
+                        alertBox.style.color = '#86efac';
+                        alertBox.style.display = 'block';
+                        document.getElementById('new_u_name').value = '';
+                        document.getElementById('new_u_pass').value = '';
+                        this.loadUsersTable();
+                    } else {
+                        alertBox.textContent = data.error || 'Failed to add user.';
+                        alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                        alertBox.style.color = '#fca5a5';
+                        alertBox.style.display = 'block';
+                    }
+                } catch(err) {
+                    alertBox.textContent = 'Server communication error.';
+                    alertBox.style.background = 'rgba(239, 68, 68, 0.2)';
+                    alertBox.style.color = '#fca5a5';
+                    alertBox.style.display = 'block';
+                }
+            },
+
+            async deleteUser(username) {
+                if (!confirm(`Are you sure you want to delete user '${username}'?`)) return;
+                try {
+                    const res = await apiFetch('/api/auth/users/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({ username })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        this.loadUsersTable();
+                    } else {
+                        alert(data.error || 'Failed to delete user.');
+                    }
+                } catch(e) {
+                    alert('Error communicating with server.');
+                }
+            },
+
+            logout(reason) {
+                // 1. Instantly hide floating hub from screen
+                const hub = document.getElementById('webdesk_hub');
+                if (hub) {
+                    hub.style.display = 'none';
+                    hub.classList.remove('visible');
+                    hub.classList.remove('expanded');
+                }
+
+                // 2. Hide and reset all noVNC UI panels
+                const connectDlg = document.getElementById('noVNC_connect_dlg');
+                if (connectDlg) connectDlg.style.display = 'none';
+
+                // 3. Clear all stored auth and session tokens
+                const token = this.token || localStorage.getItem('webdesk_token');
+                this.token = '';
+                this.user = null;
+                try {
+                    localStorage.removeItem('webdesk_token');
+                    localStorage.removeItem('webdesk_username');
+                    localStorage.removeItem('webdesk_role');
+                    localStorage.removeItem('webdesk_user_settings');
+                    localStorage.setItem('noVNC_reconnect', 'false');
+                    sessionStorage.clear();
+                } catch(e) {}
+
+                // 4. Forcefully terminate RFB socket
+                if (window.UI) {
+                    try {
+                        if (window.UI.rfb) {
+                            if (window.UI.rfb._sock) window.UI.rfb._sock.close();
+                            window.UI.rfb.disconnect();
+                        }
+                    } catch(e) {}
+                }
+
+                // 5. Fire logout notice to backend
+                if (token) {
+                    try {
+                        apiFetch('/api/auth/logout', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        }).catch(() => {});
+                    } catch(e) {}
+                }
+
+                if (reason) {
+                    alert(reason);
+                }
+
+                // 6. Hard redirect to login.html
+                window.location.replace('login.html');
+            }
+        };
+
+        // 1. Unified Draggable Floating Hub (HUD & Flyout Actions)
+        window.WebDeskHub = {
+            fps: 60,
+            frameCount: 0,
+            lastTime: performance.now(),
+            isOpen: false,
+            isDragging: false,
+            startX: 0,
+            startY: 0,
+            initialLeft: 0,
+            initialTop: 0,
+            hasMoved: false,
+
+            init() {
+                const hub = document.getElementById('webdesk_hub');
+                const handle = document.getElementById('webdesk_hub_handle');
+                if (!hub || !handle) return;
+
+                // Restore saved position
+                try {
+                    const savedPos = JSON.parse(localStorage.getItem('webdesk_hub_pos') || '{}');
+                    if (savedPos.left !== undefined && savedPos.top !== undefined) {
+                        hub.style.left = `${Math.min(window.innerWidth - 140, Math.max(10, savedPos.left))}px`;
+                        hub.style.top = `${Math.min(window.innerHeight - 50, Math.max(10, savedPos.top))}px`;
+                        hub.style.right = 'auto';
+                        hub.style.bottom = 'auto';
+                    }
+                } catch(e) {}
+
+                // Drag handling for Mouse & Touch
+                const onStart = (e) => {
+                    const evt = e.touches ? e.touches[0] : e;
+                    this.isDragging = true;
+                    this.hasMoved = false;
+                    this.startX = evt.clientX;
+                    this.startY = evt.clientY;
+
+                    const rect = hub.getBoundingClientRect();
+                    this.initialLeft = rect.left;
+                    this.initialTop = rect.top;
+
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('touchmove', onMove, { passive: false });
+                    document.addEventListener('mouseup', onEnd);
+                    document.addEventListener('touchend', onEnd);
+                };
+
+                const onMove = (e) => {
+                    if (!this.isDragging) return;
+                    const evt = e.touches ? e.touches[0] : e;
+                    const dx = evt.clientX - this.startX;
+                    const dy = evt.clientY - this.startY;
+
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+                        this.hasMoved = true;
+                        if (e.cancelable) e.preventDefault();
+                    }
+
+                    if (this.hasMoved) {
+                        let newX = this.initialLeft + dx;
+                        let newY = this.initialTop + dy;
+
+                        newX = Math.max(10, Math.min(window.innerWidth - hub.offsetWidth - 10, newX));
+                        newY = Math.max(10, Math.min(window.innerHeight - hub.offsetHeight - 10, newY));
+
+                        hub.style.left = `${newX}px`;
+                        hub.style.top = `${newY}px`;
+                        hub.style.right = 'auto';
+                        hub.style.bottom = 'auto';
+                    }
+                };
+
+                const onEnd = () => {
+                    if (!this.isDragging) return;
+                    this.isDragging = false;
+
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('touchmove', onMove);
+                    document.removeEventListener('mouseup', onEnd);
+                    document.removeEventListener('touchend', onEnd);
+
+                    if (this.hasMoved) {
+                        const rect = hub.getBoundingClientRect();
+                        try {
+                            localStorage.setItem('webdesk_hub_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+                        } catch(e) {}
+                    } else {
+                        this.toggle();
+                    }
+                };
+
+                handle.addEventListener('mousedown', onStart);
+                handle.addEventListener('touchstart', onStart, { passive: true });
+
+                // Close menu if clicked outside
+                document.addEventListener('click', (e) => {
+                    if (this.isOpen && !hub.contains(e.target)) {
+                        this.toggle(false);
+                    }
+                });
+
+                // Live FPS loop
+                const updateFps = () => {
+                    this.frameCount++;
+                    const now = performance.now();
+                    if (now - this.lastTime >= 1000) {
+                        this.fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
+                        this.frameCount = 0;
+                        this.lastTime = now;
+                        const fpsElem = document.getElementById('hub_fps');
+                        if (fpsElem) fpsElem.textContent = `${this.fps} FPS`;
+                    }
+                    requestAnimationFrame(updateFps);
+                };
+                requestAnimationFrame(updateFps);
+
+                // Ping loop (every 3s)
+                setInterval(async () => {
+                    const start = performance.now();
+                    try {
+                        await apiFetch('/status', { cache: 'no-store' });
+                        const ping = Math.round(performance.now() - start);
+                        const pingElem = document.getElementById('hub_ping');
+                        if (pingElem) pingElem.textContent = `${ping} ms`;
+                    } catch(e) {}
+                }, 3000);
+            },
+
+            toggle(forceState) {
+                const hub = document.getElementById('webdesk_hub');
+                if (!hub) return;
+                this.isOpen = forceState !== undefined ? forceState : !this.isOpen;
+                if (this.isOpen) {
+                    hub.classList.add('expanded');
+                } else {
+                    hub.classList.remove('expanded');
+                }
+            },
+
+            toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                    window.WebDeskRes.showToast("⛶ Fullscreen Mode Entered");
+                } else {
+                    document.exitFullscreen().catch(() => {});
+                    window.WebDeskRes.showToast("⛶ Fullscreen Mode Exited");
+                }
+            }
+        };
+
+        // 2. WebDesk Key Forwarder & Sticky Modifier Engine
+        window.WebDeskKeyForwarder = {
+            activeModifiers: {
+                'ControlLeft': false,
+                'AltLeft': false,
+                'ShiftLeft': false,
+                'MetaLeft': false
+            },
+
+            init() {
+                // 1. Enable Chrome/Edge Keyboard Lock API for seamless system key forwarding
+                if (navigator.keyboard && navigator.keyboard.lock) {
+                    const lockKeys = [
+                        'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight',
+                        'MetaLeft', 'MetaRight', 'Tab', 'Escape'
+                    ];
+                    navigator.keyboard.lock(lockKeys).catch(() => {});
+                    window.addEventListener('focus', () => {
+                        if (navigator.keyboard && navigator.keyboard.lock) {
+                            navigator.keyboard.lock(lockKeys).catch(() => {});
+                        }
+                    });
+                }
+
+                // 2. Intercept browser hotkeys (Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+R, Ctrl+S, Alt+Tab)
+                window.addEventListener('keydown', (e) => {
+                    const isInsideCanvas = document.activeElement && (
+                        document.activeElement.tagName === 'CANVAS' ||
+                        document.activeElement.id === 'noVNC_keyboardinput' ||
+                        document.activeElement === document.body
+                    );
+
+                    if (isInsideCanvas) {
+                        const blockedHotkeys = ['KeyW', 'KeyT', 'KeyN', 'KeyR', 'KeyS', 'KeyP'];
+                        if ((e.ctrlKey || e.metaKey) && blockedHotkeys.includes(e.code)) {
+                            e.preventDefault(); // Forward directly to remote desktop without browser stealing it
+                        }
+                    }
+                }, { capture: true });
+
+                // 3. Enable Ctrl key latching by default upon connection
+                setTimeout(() => {
+                    if (!this.activeModifiers['ControlLeft']) {
+                        this.toggleModifier('ControlLeft', 0xffe3);
+                    }
+                }, 800);
+            },
+
+            toggleModifier(code, keysym) {
+                const btnIdMap = {
+                    'ControlLeft': 'mod_ctrl',
+                    'AltLeft': 'mod_alt',
+                    'ShiftLeft': 'mod_shift',
+                    'MetaLeft': 'mod_super'
+                };
+
+                const isCurrentlyActive = this.activeModifiers[code];
+                const newState = !isCurrentlyActive;
+                this.activeModifiers[code] = newState;
+
+                if (window.UI && window.UI.rfb) {
+                    window.UI.rfb.sendKey(keysym, code, newState);
+                }
+
+                const btn = document.getElementById(btnIdMap[code]);
+                if (btn) {
+                    if (newState) {
+                        btn.classList.add('active');
+                        window.WebDeskRes.showToast(`📌 ${code.replace('Left','')} Latched (Active on Server)`);
+                    } else {
+                        btn.classList.remove('active');
+                        window.WebDeskRes.showToast(`✔ ${code.replace('Left','')} Released`);
+                    }
+                }
+            },
+
+            sendKey(keysym, code) {
+                if (window.UI && window.UI.rfb) {
+                    window.UI.rfb.sendKey(keysym, code, true);
+                    setTimeout(() => {
+                        window.UI.rfb.sendKey(keysym, code, false);
+                    }, 50);
+                    window.WebDeskRes.showToast(`⌨️ Sent ${code}`);
+                }
+            }
+        };
+
+        // 3. WebDesk Resolution Synchronizer
+        window.WebDeskRes = {
+            async sync(customMode) {
+                const dpr = window.devicePixelRatio || 1;
+                const screenW = Math.round(window.screen.width * dpr);
+                const screenH = Math.round(window.screen.height * dpr);
+                const payload = customMode ? { mode: customMode } : { width: screenW, height: screenH };
+
+                try {
+                    const res = await apiFetch('/set-resolution', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        this.showToast(`🎯 Matched Server Resolution: ${data.applied}`);
+                    }
+                } catch(e) {}
+            },
+            showToast(msg) {
+                let toast = document.getElementById('webdesk_toast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'webdesk_toast';
+                    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(6,182,212,0.92);backdrop-filter:blur(12px);color:#ffffff;padding:10px 24px;border-radius:30px;font-weight:700;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,0.6);z-index:999999;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);pointer-events:none;letter-spacing:0.3px;';
+                    document.body.appendChild(toast);
+                }
+                toast.textContent = msg;
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateX(-50%) translateY(0)';
+                clearTimeout(this._timer);
+                this._timer = setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateX(-50%) translateY(12px)';
+                }, 3500);
+            }
+        };
+
+        // 4. WebDesk Special Keys Injection
+        window.WebDeskKeys = {
+            async send(combo) {
+                try {
+                    const res = await apiFetch('/api/key', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ combo: combo })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        window.WebDeskRes.showToast(`⌨️ Sent Key: ${combo}`);
+                    }
+                } catch(e) {}
+            },
+            sendCtrlAltDel() {
+                if (window.UI && window.UI.rfb) {
+                    window.UI.rfb.sendCtrlAltDel();
+                    window.WebDeskRes.showToast('⌨️ Sent Ctrl+Alt+Del');
+                } else {
+                    const cadBtn = document.getElementById('noVNC_send_ctrl_alt_del_button');
+                    if (cadBtn) {
+                        cadBtn.click();
+                        window.WebDeskRes.showToast('⌨️ Sent Ctrl+Alt+Del');
+                    } else {
+                        this.send('ctrl+alt+Delete');
+                    }
+                }
+            }
+        };
+
+        // 4. WebDesk Power Actions
+        window.WebDeskPower = {
+            openModal() {
+                document.getElementById('webdesk_power_modal').classList.add('open');
+            },
+            closeModal() {
+                document.getElementById('webdesk_power_modal').classList.remove('open');
+            },
+            async action(act) {
+                this.closeModal();
+                try {
+                    const res = await apiFetch('/api/power', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: act })
+                    });
+                    const data = await res.json();
+                    window.WebDeskRes.showToast(`🔒 ${data.message || act}`);
+                } catch(e) {}
+            }
+        };
+
+        // 5. WebDesk Drag & Drop + File Downloads
+        window.WebDeskFiles = {
+            initDropZone() {
+                const dropzone = document.getElementById('webdesk_dropzone');
+                let dragCounter = 0;
+
+                window.addEventListener('dragenter', (e) => {
+                    e.preventDefault();
+                    dragCounter++;
+                    dropzone.classList.add('active');
+                });
+
+                window.addEventListener('dragleave', (e) => {
+                    e.preventDefault();
+                    dragCounter--;
+                    if (dragCounter <= 0) {
+                        dragCounter = 0;
+                        dropzone.classList.remove('active');
+                    }
+                });
+
+                window.addEventListener('dragover', (e) => e.preventDefault());
+
+                window.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    dragCounter = 0;
+                    dropzone.classList.remove('active');
+
+                    const files = e.dataTransfer.files;
+                    if (!files || files.length === 0) return;
+
+                    for (const file of files) {
+                        window.WebDeskRes.showToast(`📤 Uploading: ${file.name}...`);
+                        try {
+                            const res = await apiFetch('/api/upload', {
+                                method: 'POST',
+                                headers: {
+                                    'X-Filename': encodeURIComponent(file.name),
+                                    'Content-Type': file.type || 'application/octet-stream',
+                                    'Authorization': `Bearer ${window.WebDeskAuth.token}`
+                                },
+                                body: file
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                window.WebDeskRes.showToast(`✔ Saved to ~/Downloads/${data.filename}`);
+                            }
+                        } catch (err) {
+                            window.WebDeskRes.showToast(`❌ Upload failed: ${file.name}`);
+                        }
+                    }
+                });
+            },
+            openModal() {
+                document.getElementById('webdesk_file_modal').classList.add('open');
+                this.loadFiles();
+            },
+            closeModal() {
+                document.getElementById('webdesk_file_modal').classList.remove('open');
+            },
+            async loadFiles() {
+                const list = document.getElementById('webdesk_file_list');
+                list.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">Scanning ~/Downloads...</div>`;
+                try {
+                    const res = await apiFetch('/api/files', {
+                        headers: { 'Authorization': `Bearer ${window.WebDeskAuth.token}` }
+                    });
+                    const data = await res.json();
+                    if (!data.files || data.files.length === 0) {
+                        list.innerHTML = `<div style="text-align: center; color: #9ca3af; padding: 20px;">No files found in ~/Downloads.</div>`;
+                        return;
+                    }
+                    list.innerHTML = data.files.map(f => {
+                        const sizeKB = (f.size / 1024).toFixed(1);
+                        const sizeMB = (f.size / (1024 * 1024)).toFixed(2);
+                        const displaySize = f.size > 1048576 ? `${sizeMB} MB` : `${sizeKB} KB`;
+                        const dlUrl = `https://${API_HOST}:${API_PORT}/api/download?file=${encodeURIComponent(f.name)}&token=${encodeURIComponent(window.WebDeskAuth.token)}`;
+                        return `
+                            <div class="file-item">
+                                <div>
+                                    <b>📄 ${f.name}</b>
+                                    <div style="font-size: 11px; color: #9ca3af;">${displaySize}</div>
+                                </div>
+                                <a href="${dlUrl}" target="_blank" download="${f.name}">📥 Download</a>
+                            </div>
+                        `;
+                    }).join('');
+                } catch(e) {
+                    list.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 20px;">Failed to load files list.</div>`;
+                }
+            }
+        };
+
+        // 6. WebDesk View-Only Toggle
+        window.WebDeskViewOnly = {
+            viewOnly: false,
+            toggle() {
+                const chk = document.getElementById('noVNC_setting_view_only');
+                if (chk) {
+                    chk.checked = !chk.checked;
+                    chk.dispatchEvent(new Event('change', { bubbles: true }));
+                    this.viewOnly = chk.checked;
+                } else if (window.UI && window.UI.rfb) {
+                    this.viewOnly = !this.viewOnly;
+                    window.UI.rfb.viewOnly = this.viewOnly;
+                } else {
+                    this.viewOnly = !this.viewOnly;
+                }
+
+                // Direct DOM canvas pointer-events lock for instant response
+                const canvas = document.querySelector('#noVNC_container canvas') || document.querySelector('#noVNC_container');
+                if (canvas) {
+                    canvas.style.pointerEvents = this.viewOnly ? 'none' : 'auto';
+                }
+
+                const btn = document.getElementById('btn_view_only');
+                if (btn) {
+                    btn.classList.toggle('active', this.viewOnly);
+                    btn.style.background = this.viewOnly ? '#eab308' : 'rgba(255,255,255,0.05)';
+                    const textSpan = btn.querySelector('span:last-child');
+                    if (textSpan) textSpan.textContent = this.viewOnly ? 'View (ON)' : 'View Only';
+                }
+                window.WebDeskRes.showToast(this.viewOnly ? "👀 View-Only Mode Enabled (Inputs Blocked)" : "⌨️ Control Mode Enabled (Full Access)");
+            }
+        };
+
+        // 7. WebDesk Settings & Display Preferences
+        window.WebDeskSettings = {
+            openModal() {
+                document.getElementById('webdesk_settings_modal').classList.add('open');
+                this.syncCurrentValues();
+            },
+            closeModal() {
+                document.getElementById('webdesk_settings_modal').classList.remove('open');
+            },
+            syncCurrentValues() {
+                const resizeEl = document.getElementById('noVNC_setting_resize');
+                if (resizeEl) {
+                    document.getElementById('hub_setting_scaling').value = resizeEl.value;
+                }
+                const qEl = document.getElementById('noVNC_setting_quality');
+                if (qEl) {
+                    document.getElementById('hub_setting_quality').value = qEl.value;
+                    document.getElementById('val_quality').textContent = qEl.value;
+                }
+                const cEl = document.getElementById('noVNC_setting_compression');
+                if (cEl) {
+                    document.getElementById('hub_setting_compression').value = cEl.value;
+                    document.getElementById('val_compression').textContent = cEl.value;
+                }
+            },
+            updateScaling(val) {
+                const resizeEl = document.getElementById('noVNC_setting_resize');
+                if (resizeEl) {
+                    resizeEl.value = val;
+                    resizeEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                try { localStorage.setItem('noVNC_resize', val); } catch(e) {}
+                window.WebDeskRes.showToast(`Scaling mode: ${val}`);
+            },
+            updateQuality(val) {
+                document.getElementById('val_quality').textContent = val;
+                const qEl = document.getElementById('noVNC_setting_quality');
+                if (qEl) {
+                    qEl.value = val;
+                    qEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            },
+            updateCompression(val) {
+                document.getElementById('val_compression').textContent = val;
+                const cEl = document.getElementById('noVNC_setting_compression');
+                if (cEl) {
+                    cEl.value = val;
+                    cEl.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            },
+            async updateProfile(prof) {
+                try {
+                    const res = await apiFetch('/api/profile', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ profile: prof })
+                    });
+                    const data = await res.json();
+                    if (data.ok || data.success) {
+                        window.WebDeskRes.showToast(`✔ Speed Profile: ${prof}`);
+                    }
+                } catch(e) {}
+            },
+            async savePreferences() {
+                const scaling = document.getElementById('hub_setting_scaling').value;
+                const profile = document.getElementById('hub_setting_profile').value;
+                const quality = parseInt(document.getElementById('hub_setting_quality').value);
+                const compression = parseInt(document.getElementById('hub_setting_compression').value);
+
+                try {
+                    await apiFetch('/api/save-settings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${window.WebDeskAuth.token}`
+                        },
+                        body: JSON.stringify({
+                            settings: {
+                                resize: scaling,
+                                profile: profile,
+                                quality: quality,
+                                compression: compression
+                            }
+                        })
+                    });
+                    window.WebDeskRes.showToast("💾 Saved Display Preferences to Account");
+                } catch(e) {
+                    window.WebDeskRes.showToast("✔ Settings Applied locally");
+                }
+                this.closeModal();
+            }
+        };
+
+        // 8. WebDesk Clipboard (Automatic Sync + Manual Modal)
+        window.WebDeskClipboard = {
+            init() {
+                if (!navigator.clipboard) return;
+
+                // Sync from Remote Desktop -> Host PC
+                window.addEventListener('DOMContentLoaded', () => {
+                    const checkRfb = setInterval(() => {
+                        if (window.UI && window.UI.rfb) {
+                            clearInterval(checkRfb);
+                            window.UI.rfb.addEventListener('clipboard', (e) => {
+                                if (e.detail && e.detail.text) {
+                                    navigator.clipboard.writeText(e.detail.text).catch(() => {});
+                                    const ta = document.getElementById('hub_clipboard_textarea');
+                                    if (ta) ta.value = e.detail.text;
+                                }
+                            });
+                        }
+                    }, 500);
+                });
+
+                // Sync from Host PC -> Remote Desktop on Window Focus or Paste
+                window.addEventListener('focus', async () => {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && window.UI && window.UI.rfb) {
+                            window.UI.rfb.clipboardPasteFrom(text);
+                        }
+                    } catch(e) {}
+                });
+
+                window.addEventListener('paste', async (e) => {
+                    try {
+                        const text = e.clipboardData ? e.clipboardData.getData('text') : await navigator.clipboard.readText();
+                        if (text && window.UI && window.UI.rfb) {
+                            window.UI.rfb.clipboardPasteFrom(text);
+                        }
+                    } catch(e) {}
+                });
+            },
+            openModal() {
+                document.getElementById('webdesk_clipboard_modal').classList.add('open');
+                const novncText = document.getElementById('noVNC_clipboard_text');
+                if (novncText && novncText.value) {
+                    document.getElementById('hub_clipboard_textarea').value = novncText.value;
+                }
+            },
+            closeModal() {
+                document.getElementById('webdesk_clipboard_modal').classList.remove('open');
+            },
+            pasteToRemote() {
+                const text = document.getElementById('hub_clipboard_textarea').value;
+                if (window.UI && window.UI.rfb) {
+                    window.UI.rfb.clipboardPasteFrom(text);
+                    window.WebDeskRes.showToast('📥 Sent text to remote clipboard');
+                } else {
+                    const ta = document.getElementById('noVNC_clipboard_text');
+                    if (ta) {
+                        ta.value = text;
+                        ta.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    window.WebDeskRes.showToast('📥 Sent text to remote clipboard');
+                }
+                this.closeModal();
+            },
+            copyFromRemote() {
+                const novncText = document.getElementById('noVNC_clipboard_text');
+                if (novncText && novncText.value) {
+                    document.getElementById('hub_clipboard_textarea').value = novncText.value;
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(novncText.value).catch(() => {});
+                    }
+                    window.WebDeskRes.showToast('📋 Copied remote text to clipboard');
+                } else {
+                    window.WebDeskRes.showToast('ℹ Remote clipboard is empty');
+                }
+            }
+        };
+
+        // 8. WebDesk In-Browser Low-Latency PCM Audio Engine
+        window.WebDeskAudio = {
+            ws: null,
+            ctx: null,
+            gainNode: null,
+            nextStartTime: 0,
+            sampleRate: 44100,
+            channels: 2,
+            enabled: localStorage.getItem('webdesk_audio_enabled') !== 'false',
+            volume: parseFloat(localStorage.getItem('webdesk_audio_volume') || '0.8'),
+
+            init() {
+                if (!this.enabled) return;
+                this.start();
+            },
+
+            start() {
+                if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+                    return;
+                }
+
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+
+                if (!this.ctx || this.ctx.state === 'closed') {
+                    this.ctx = new AudioCtx({ sampleRate: this.sampleRate });
+                    this.gainNode = this.ctx.createGain();
+                    this.gainNode.gain.value = this.volume;
+                    this.gainNode.connect(this.ctx.destination);
+                }
+
+                if (this.ctx.state === 'suspended') {
+                    const resumeHandler = () => {
+                        if (this.ctx && this.ctx.state === 'suspended') {
+                            this.ctx.resume();
+                        }
+                        window.removeEventListener('click', resumeHandler);
+                        window.removeEventListener('keydown', resumeHandler);
+                    };
+                    window.addEventListener('click', resumeHandler);
+                    window.addEventListener('keydown', resumeHandler);
+                }
+
+                const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const url = `${proto}//${API_HOST}:6086`;
+
+                try {
+                    this.ws = new WebSocket(url);
+                    this.ws.binaryType = 'arraybuffer';
+
+                    this.ws.onopen = () => {
+                        this.nextStartTime = 0;
+                        window.WebDeskRes.showToast("🔊 Remote Audio Connected");
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+                        if (!(event.data instanceof ArrayBuffer)) return;
+                        this.playPcmChunk(event.data);
+                    };
+                } catch (err) {}
+            },
+
+            stop() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                if (this.ctx && this.ctx.state !== 'closed') {
+                    this.ctx.close().catch(() => {});
+                    this.ctx = null;
+                }
+            },
+
+            toggle() {
+                this.enabled = !this.enabled;
+                localStorage.setItem('webdesk_audio_enabled', this.enabled ? 'true' : 'false');
+                if (this.enabled) {
+                    this.start();
+                    window.WebDeskRes.showToast("🔊 Audio Enabled");
+                } else {
+                    this.stop();
+                    window.WebDeskRes.showToast("🔇 Audio Disabled (0 KB/s Bandwidth Saved)");
+                }
+            },
+
+            playPcmChunk(arrayBuffer) {
+                const int16 = new Int16Array(arrayBuffer);
+                const frameCount = int16.length / this.channels;
+                if (frameCount === 0) return;
+
+                const audioBuf = this.ctx.createBuffer(this.channels, frameCount, this.sampleRate);
+                const leftChannel = audioBuf.getChannelData(0);
+                const rightChannel = audioBuf.getChannelData(1);
+
+                for (let i = 0; i < frameCount; i++) {
+                    leftChannel[i] = int16[i * 2] / 32768.0;
+                    rightChannel[i] = int16[i * 2 + 1] / 32768.0;
+                }
+
+                const source = this.ctx.createBufferSource();
+                source.buffer = audioBuf;
+                source.connect(this.gainNode);
+
+                const currentTime = this.ctx.currentTime;
+                if (this.nextStartTime < currentTime) {
+                    this.nextStartTime = currentTime + 0.03;
+                }
+
+                source.start(this.nextStartTime);
+                this.nextStartTime += audioBuf.duration;
+            }
+        };
+
+        // Initialize features ONLY upon successful login & connection
+        window.addEventListener('DOMContentLoaded', () => {
+            window.WebDeskAuth.init();
+
+            const bar = document.getElementById('noVNC_control_bar');
+            const target = document.getElementById('noVNC_status');
+            const hub = document.getElementById('webdesk_hub');
+            let isHubInitialized = false;
+
+            // Ensure hub is hidden by default if token is missing
+            if (!localStorage.getItem('webdesk_token')) {
+                if (hub) {
+                    hub.style.display = 'none';
+                    hub.classList.remove('visible');
+                    hub.classList.remove('expanded');
+                }
+                window.location.replace('login.html');
+                return;
+            }
+
+            // Intercept connect button if ever displayed
+            const connectBtn = document.getElementById('noVNC_connect_button');
+            if (connectBtn) {
+                connectBtn.addEventListener('click', (e) => {
+                    if (!localStorage.getItem('webdesk_token')) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        window.location.replace('login.html');
+                    }
+                }, true);
+            }
+
+            if (target) {
+                const obs = new MutationObserver(() => {
+                    const statusText = target.textContent.toLowerCase();
+                    const hasToken = !!localStorage.getItem('webdesk_token');
+                    if (statusText.includes('connected') && hasToken) {
+                        // User is logged in and connected!
+                        if (bar) bar.classList.remove('noVNC_open');
+                        if (hub) {
+                            hub.style.display = '';
+                            hub.classList.add('visible');
+                            if (!isHubInitialized) {
+                                window.WebDeskHub.init();
+                                window.WebDeskAuth.applyRolePermissions();
+                                window.WebDeskKeyForwarder.init();
+                                window.WebDeskFiles.initDropZone();
+                                window.WebDeskClipboard.init();
+                                isHubInitialized = true;
+                            }
+                        }
+                        setTimeout(() => window.WebDeskRes.sync(), 1000);
+                        setTimeout(() => window.WebDeskAudio.init(), 1500);
+                    } else if (statusText.includes('disconnected') || statusText.includes('connecting') || !hasToken) {
+                        // Not connected or logged out - hide hub completely
+                        if (hub) {
+                            hub.classList.remove('visible');
+                            hub.classList.remove('expanded');
+                            hub.style.display = 'none';
+                        }
+                        if (!hasToken) {
+                            window.location.replace('login.html');
+                        }
+                    }
+                });
+                obs.observe(target, { childList: true, characterData: true, subtree: true });
+            }
+        });
+
+        // Match resolution when entering browser fullscreen
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                setTimeout(() => window.WebDeskRes.sync(), 300);
+            }
+        });
+
+        // 🔒 Airtight capture-phase keyboard and wheel lock for Guest / Viewer accounts
+        ['keydown', 'keyup', 'keypress'].forEach(evtName => {
+            window.addEventListener(evtName, (e) => {
+                if (window.WebDeskAuth && window.WebDeskAuth.user && (window.WebDeskAuth.user.role === 'viewer' || window.WebDeskAuth.user.role === 'guest')) {
+                    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) {
+                        return;
+                    }
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+                }
+            }, true);
+        });
+    </script>
+ </body>
+</html>

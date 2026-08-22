@@ -68,16 +68,37 @@ WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
 
 ---
 
-### Directory Hierarchy
+### Repository Source Layout
 
-All persistent runtime assets, binaries, and configurations are stored in `~/.local/share/webdesk/`:
+```
+WebDesk/
+├── README.md                      # Unified documentation & system manual
+├── .gitignore                     # Git ignore rules
+├── webdesk.sh                     # Primary CLI orchestrator & daemon manager
+├── webdesk_gui.py                 # Native PyGObject (GTK3) Desktop Control Panel
+└── src/
+    ├── api_server.py              # REST API & RBAC Controller (Port 6085)
+    ├── audio_server.py            # Live PulseAudio/PipeWire WebSocket streamer (Port 6086)
+    ├── user_auth.py               # User authentication & credentials module
+    └── web/
+        ├── vnc.html               # HTML5 portal with Draggable AssistiveTouch Floating Hub
+        └── app/
+            └── styles/
+                └── webdesk.css    # AssistiveTouch HUD & glassmorphic styling
+```
+
+---
+
+### Installed Runtime Hierarchy (`~/.local/share/webdesk/`)
+
+All persistent runtime assets, binaries, and configurations are deployed to `~/.local/share/webdesk/`:
 
 ```
 ~/.local/share/webdesk/
 ├── api_server.py          # REST API & RBAC Controller
 ├── audio_server.py        # Live PulseAudio/PipeWire WebSocket streamer
+├── user_auth.py           # User authentication module
 ├── config.env             # Global profile & environment configuration
-├── res_server.py          # Display resolution helper
 ├── revoked_tokens.json    # Revocation list for terminated sessions
 ├── secret.key             # HMAC-SHA256 session token signing key (0600)
 ├── users.json             # Salted PBKDF2 user database & saved preferences (0600)
@@ -87,7 +108,7 @@ All persistent runtime assets, binaries, and configurations are stored in `~/.lo
 ├── webdesk.log            # System & runtime service logs
 └── root/                  # Self-contained bundled runtime dependencies
     ├── usr/bin/           # x11vnc, websockify, xdotool, etc.
-    └── usr/share/novnc/   # HTML5 web client (vnc.html, login.html, etc.)
+    └── usr/share/novnc/   # HTML5 web client (vnc.html, index.html, app/styles/webdesk.css)
 ```
 
 ---
@@ -365,6 +386,7 @@ The Floating Action Hub provides one-touch buttons and key latching to send desk
 
 Admins can perform system-level actions directly from the **🔒 Power** menu:
 * **🔒 Lock Screen**: Locks the active desktop session.
+* **👥 Switch User**: Switches the active seat to the display manager login greeter without terminating running background user sessions (`dm-tool switch-to-greeter`).
 * **🚪 Log Out**: Logs out the current user session (`loginctl terminate-user`).
 * **🌙 Suspend**: Puts the host computer into system sleep/suspend.
 * **🔄 Reboot**: Reboots the Linux system (`systemctl reboot`).
@@ -376,6 +398,7 @@ Admins can perform system-level actions directly from the **🔒 Power** menu:
 
 WebDesk can run as a persistent `systemd` service (`webdesk.service`):
 * **LightDM / Display Manager Streaming**: Allows logging into Linux from a cold boot via browser before any user logs in physically.
+* **Fast Multi-User Switching**: Dynamically tracks active virtual terminals (`/sys/class/tty/tty0/active`) and active sessions (`loginctl show-seat seat0`), seamlessly transferring the stream between active user sessions (`:0`, `:1`, etc.) and the login greeter when users switch without logging out.
 * **Automatic Recovery**: Service automatically restarts if the X server resets or user logs out.
 * **Installation**: Run `./webdesk.sh install-service` or select Menu Option `6`.
 
