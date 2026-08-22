@@ -453,6 +453,19 @@
         <p>Files will be saved directly into Linux ~/Downloads</p>
     </div>
 
+    <!-- Blurred Background Session Alert Modal (Superseded Session / Disconnection) -->
+    <div id="webdesk_session_alert_modal" class="session-alert-overlay" style="display: none;" onclick="window.location.replace('login.html?reason=' + encodeURIComponent(document.getElementById('session_alert_text').textContent))">
+        <div class="session-alert-card" onclick="event.stopPropagation()">
+            <div class="session-alert-icon">⚠️</div>
+            <h2 class="session-alert-title">Session Disconnected</h2>
+            <p class="session-alert-msg" id="session_alert_text">New session started in another browser.</p>
+            <button class="session-alert-btn" onclick="window.location.replace('login.html?reason=' + encodeURIComponent(document.getElementById('session_alert_text').textContent))">
+                <span>Go to Login Screen</span>
+                <span>➔</span>
+            </button>
+        </div>
+    </div>
+
     <!-- Display & Scaling Settings Modal -->
     <div class="webdesk-modal-bg" id="webdesk_settings_modal">
         <div class="webdesk-modal-card" style="width: 420px; max-width: 95vw;">
@@ -670,7 +683,7 @@
 
             async init() {
                 if (!this.token) {
-                    window.location.href = 'login.html';
+                    window.location.replace('login.html');
                     return false;
                 }
 
@@ -679,8 +692,7 @@
                         headers: { 'Authorization': `Bearer ${this.token}` }
                     });
                     if (!res.ok) {
-                        localStorage.removeItem('webdesk_token');
-                        window.location.href = 'login.html';
+                        this.showSessionTerminatedModal('New session started in another browser.');
                         return false;
                     }
                     const data = await res.json();
@@ -770,14 +782,14 @@
                         });
                         if (hRes.status === 401) {
                             // User was kicked, suspended, or superseded by new login on another browser
-                            let reasonMsg = 'A new session was started for your account on another browser. You have been logged out.';
+                            let reasonMsg = 'New session started in another browser.';
                             try {
                                 const hData = await hRes.json();
                                 if (hData && hData.error) {
                                     reasonMsg = hData.error;
                                 }
                             } catch(e) {}
-                            this.logout(reasonMsg);
+                            this.showSessionTerminatedModal(reasonMsg);
                             return;
                         }
                         const res = await apiFetch('/api/auth/viewers', {
@@ -1134,6 +1146,68 @@
                     targetUrl += '?reason=' + encodeURIComponent(reason);
                 }
                 window.location.replace(targetUrl);
+            },
+
+            showSessionTerminatedModal(reason) {
+                // 1. Instantly hide floating hub from screen
+                const hub = document.getElementById('webdesk_hub');
+                if (hub) {
+                    hub.style.display = 'none';
+                    hub.classList.remove('visible');
+                    hub.classList.remove('expanded');
+                }
+
+                // 2. Hide and reset all noVNC UI panels
+                const connectDlg = document.getElementById('noVNC_connect_dlg');
+                if (connectDlg) connectDlg.style.display = 'none';
+                const transDlg = document.getElementById('noVNC_transition');
+                if (transDlg) transDlg.style.display = 'none';
+
+                // 3. Clear all stored auth and session tokens
+                const token = this.token || localStorage.getItem('webdesk_token');
+                this.token = '';
+                this.user = null;
+                try {
+                    localStorage.removeItem('webdesk_token');
+                    localStorage.removeItem('webdesk_username');
+                    localStorage.removeItem('webdesk_role');
+                    localStorage.removeItem('webdesk_user_settings');
+                    localStorage.setItem('noVNC_reconnect', 'false');
+                    sessionStorage.clear();
+                } catch(e) {}
+
+                // 4. Forcefully terminate RFB socket
+                if (window.UI) {
+                    try {
+                        if (window.UI.rfb) {
+                            if (window.UI.rfb._sock) window.UI.rfb._sock.close();
+                            window.UI.rfb.disconnect();
+                        }
+                    } catch(e) {}
+                }
+
+                // 5. Fire logout notice to backend
+                if (token) {
+                    try {
+                        apiFetch('/api/auth/logout', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        }).catch(() => {});
+                    } catch(e) {}
+                }
+
+                // 6. Display blurred background alert modal
+                const modal = document.getElementById('webdesk_session_alert_modal');
+                const alertText = document.getElementById('session_alert_text');
+                const displayMsg = reason || 'New session started in another browser.';
+                if (modal) {
+                    if (alertText) {
+                        alertText.textContent = displayMsg;
+                    }
+                    modal.style.display = 'flex';
+                } else {
+                    window.location.replace('login.html?reason=' + encodeURIComponent(displayMsg));
+                }
             }
         };
 
@@ -1938,7 +2012,9 @@
                             hub.classList.remove('expanded');
                             hub.style.display = 'none';
                         }
-                        if (!hasToken) {
+                        const modal = document.getElementById('webdesk_session_alert_modal');
+                        const isModalOpen = modal && modal.style.display === 'flex';
+                        if (!hasToken && !isModalOpen) {
                             window.location.replace('login.html');
                         }
                     }
