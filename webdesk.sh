@@ -210,33 +210,105 @@ install_webdesk() {
     
     cd "${INSTALL_DIR}/downloads"
     echo -e "${YELLOW}--> Downloading packages (no root/sudo required)...${NC}"
-    /usr/bin/apt-get download x11vnc libvncserver1 libvncclient1 novnc websockify python3-websockify xdotool libxdo3 xclip libxmu6 >/dev/null 2>&1 || {
-        echo -e "${RED}[!] Error downloading packages. Please check internet connection.${NC}"
-        exit 1
-    }
+    local APT_CMD
+    APT_CMD="$(command -v apt-get 2>/dev/null || echo "/usr/bin/apt-get")"
+    for pkg in x11vnc novnc websockify python3-websockify xdotool xclip libvncserver1 libvncserver1t64 libvncclient1 libvncclient1t64 libxdo3 libxmu6; do
+        ${APT_CMD} download "$pkg" >/dev/null 2>&1 || true
+    done
+
+    # Check if at least core packages were downloaded, else update index and retry
+    if ! ls *.deb >/dev/null 2>&1; then
+        echo -e "${YELLOW}--> Updating package index and retrying download...${NC}"
+        ${APT_CMD} update -qq 2>/dev/null || true
+        for pkg in x11vnc novnc websockify python3-websockify xdotool xclip; do
+            ${APT_CMD} download "$pkg" >/dev/null 2>&1 || true
+        done
+        if ! ls *.deb >/dev/null 2>&1; then
+            echo -e "${RED}[!] Error downloading packages. Please check your internet connection or run: sudo apt update && sudo apt install -y x11vnc novnc websockify python3-websockify xdotool xclip${NC}"
+            exit 1
+        fi
+    fi
 
     echo -e "${YELLOW}--> Extracting binaries and web assets...${NC}"
     for deb in *.deb; do
-        dpkg -x "$deb" "${VNC_ROOT}" >/dev/null 2>&1
+        [ -f "$deb" ] && dpkg -x "$deb" "${VNC_ROOT}" >/dev/null 2>&1 || true
     done
 
     rm -rf "${INSTALL_DIR}/downloads"
+
+    # Self-install webdesk script to permanent directory
+    mkdir -p "${INSTALL_DIR}"
+    if [ -f "${SCRIPT_PATH}" ] && grep -q 'APP_NAME="WebDesk"' "${SCRIPT_PATH}" 2>/dev/null; then
+        cp -f "${SCRIPT_PATH}" "${INSTALL_DIR}/webdesk.sh"
+    else
+        curl -fsSL "https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh" -o "${INSTALL_DIR}/webdesk.sh" 2>/dev/null || true
+    fi
+    chmod +x "${INSTALL_DIR}/webdesk.sh" 2>/dev/null || true
+
     mkdir -p "${USER_HOME}/.local/bin"
-    ln -sf "${SCRIPT_PATH}" "${USER_HOME}/.local/bin/webdesk"
+    ln -sf "${INSTALL_DIR}/webdesk.sh" "${USER_HOME}/.local/bin/webdesk"
+
+    # Create system-wide symlink if writable
+    if [ -w "/usr/local/bin" ] || [ "$EUID" -eq 0 ]; then
+        ln -sf "${INSTALL_DIR}/webdesk.sh" "/usr/local/bin/webdesk" 2>/dev/null || true
+    fi
+
+    # Ensure ~/.local/bin is in PATH for shell profiles
+    if [[ ":$PATH:" != *":${USER_HOME}/.local/bin:"* ]]; then
+        for rc in "${USER_HOME}/.bashrc" "${USER_HOME}/.profile" "${USER_HOME}/.zshrc"; do
+            if [ -f "$rc" ] && ! grep -q 'export PATH=.*\.local/bin' "$rc" 2>/dev/null; then
+                echo -e '\n# Added by WebDesk\nexport PATH="$HOME/.local/bin:$PATH"' >> "$rc"
+            fi
+        done
+    fi
 
     ensure_runtime_files
     generate_ssl_cert
     ensure_index_page
 
-    # Master Security Initialization
-    echo -e "\n${CYAN}==============================================================${NC}"
-    echo -e "  ${BOLD}[🔒 Master Security Setup]${NC}"
-    echo -e "  WebDesk protects administrative operations with a Master Password."
-    echo -e "  Choose your preferred Master Password mode:\n"
-    echo -e "    ${BOLD}1)${NC} ✍️  Set your own Custom Master Password (Recommended)"
-    echo -e "    ${BOLD}2)${NC} 🔄 Use Default Dynamic Daily Rule (Pass@<Day><Date>, e.g. Pass@$(date +%a)$(date +%-d))"
-    echo -e "${CYAN}==============================================================${NC}"
-    read -rp "Select mode [1-2, default 1]: " init_mp_choice </dev/tty || init_mp_choice="1"
+    # Master Security Initialization (Interactive vs Non-Interactive)
+    local init_mp_choice="2"
+    if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
+        echo -e "\n${CYAN}==============================================================${NC}"
+        echo -e "  ${BOLD}[🔒 Master Security Setup]${NC}"
+        echo -e "  WebDesk protects administrative operations with a Master Password."
+        echo -e "  Choose your preferred Master Password mode:\n"
+        echo -e "    ${BOLD}1)${NC} ✍️  Set your own Custom Master Password (Recommended)"
+        echo -e "    ${BOLD}2)${NC} 🔄 Use Default Dynamic Daily Rule (Pass@<Day><Date>, e.g. Pass@$(date +%a)$(date +%-d))"
+        echo -e "${CYAN}==============================================================${NC}"
+        read -rp "Select mode [1-2, default 1]: " init_mp_choice < /dev/tty 2>/dev/null || init_mp_choice="2"
+
+        if [ "$init_mp_choice" = "1" ]; then
+            while true; do
+                read -rsp "Enter custom Master Password (min 6 characters): " init_pw < /dev/tty 2>/dev/null || true
+                echo ""
+                if [ -z "${init_pw}" ]; then
+                    init_mp_choice="2"
+                    break
+                fi
+                if [ ${#init_pw} -lt 6 ]; then
+                    echo -e "${RED}Password must be at least 6 characters long. Try again.${NC}"
+                    continue
+                fi
+                read -rsp "Confirm custom Master Password: " init_pw_conf < /dev/tty 2>/dev/null || true
+                echo ""
+                if [ "$init_pw" != "$init_pw_conf" ]; then
+                    echo -e "${RED}Passwords do not match. Try again.${NC}"
+                    continue
+                fi
+                python3 -c "
+import sys
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2] + '/src')
+sys.path.insert(0, sys.argv[2])
+import user_auth
+user_auth.set_custom_master_password(sys.argv[3])
+" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${init_pw}" 2>/dev/null || true
+                echo -e "${GREEN}✔ Custom Master Password saved successfully.${NC}\n"
+                break
+            done
+        fi
+    fi
 
     if [ "$init_mp_choice" = "2" ]; then
         python3 -c "
@@ -248,34 +320,15 @@ import user_auth
 user_auth.reset_master_password_to_rule()
 " 2>/dev/null || true
         echo -e "${GREEN}✔ Configured with Dynamic Rule (Today's password: Pass@$(date +%a)$(date +%-d))${NC}\n"
-    else
-        while true; do
-            read -rsp "Enter custom Master Password (min 6 characters): " init_pw </dev/tty || true
-            echo ""
-            if [ ${#init_pw} -lt 6 ]; then
-                echo -e "${RED}Password must be at least 6 characters long. Try again.${NC}"
-                continue
-            fi
-            read -rsp "Confirm custom Master Password: " init_pw_conf </dev/tty || true
-            echo ""
-            if [ "$init_pw" != "$init_pw_conf" ]; then
-                echo -e "${RED}Passwords do not match. Try again.${NC}"
-                continue
-            fi
-            python3 -c "
-import sys
-sys.path.insert(0, sys.argv[1])
-sys.path.insert(0, sys.argv[2] + '/src')
-sys.path.insert(0, sys.argv[2])
-import user_auth
-user_auth.set_custom_master_password(sys.argv[3])
-" "${INSTALL_DIR}" "${SCRIPT_DIR}" "${init_pw}" 2>/dev/null || true
-            echo -e "${GREEN}✔ Custom Master Password saved successfully.${NC}\n"
-            break
-        done
     fi
 
-    echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}\n"
+    # Fix ownership if installed via sudo
+    if [ "$EUID" -eq 0 ] && [ "${REAL_USER}" != "root" ]; then
+        chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
+    fi
+
+    echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}"
+    echo -e "You can now run '${CYAN}${BOLD}webdesk${NC}' or '${CYAN}${BOLD}webdesk start${NC}' from anywhere in your terminal.\n"
 }
 
 remove_webdesk() {
@@ -636,6 +689,9 @@ install_system_service() {
     
     chmod 644 "${CERT_PEM}" "${CERT_CRT}" "${CERT_KEY}" 2>/dev/null || true
 
+    local svc_bin="${INSTALL_DIR}/webdesk.sh"
+    [ ! -f "$svc_bin" ] && svc_bin="${SCRIPT_PATH}"
+
     cat << EOF_SVC > "${SERVICE_FILE}"
 [Unit]
 Description=WebDesk Remote Desktop Server (System & Login Screen Service)
@@ -644,7 +700,7 @@ Wants=display-manager.service
 
 [Service]
 Type=simple
-ExecStart=${SCRIPT_PATH} system-service
+ExecStart=${svc_bin} system-service
 Restart=always
 RestartSec=3
 Environment=DISPLAY=:0
@@ -1876,10 +1932,13 @@ enable_autostart() {
     echo -e "${BLUE}${BOLD}[WebDesk]${NC} Enabling automatic start on desktop login..."
     mkdir -p "${AUTOSTART_DIR}"
 
+    local exec_bin="${INSTALL_DIR}/webdesk.sh"
+    [ ! -f "$exec_bin" ] && exec_bin="${SCRIPT_PATH}"
+
     cat << DESKTOP_EOF > "${AUTOSTART_FILE}"
 [Desktop Entry]
 Type=Application
-Exec=${SCRIPT_PATH} start
+Exec=${exec_bin} start
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
@@ -2365,7 +2424,11 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         ;;
     menu|interactive|"")
-        interactive_menu
+        if [ -z "${1:-}" ] && [ ! -t 0 ] && [ -z "${WEBDESK_RUNNING_UNDER_SYSTEMD:-}" ]; then
+            install_webdesk
+        else
+            interactive_menu
+        fi
         ;;
     *)
         echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"

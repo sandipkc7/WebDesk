@@ -8,7 +8,11 @@
 
 ### 🚀 1-Line Automated Installation
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
+curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh | bash
+```
+*or download and run directly:*
+```bash
+curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
 ```
 
 ### 🌐 Accessing Your Linux Desktop
