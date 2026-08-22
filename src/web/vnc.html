@@ -649,14 +649,6 @@
                     <span style="font-size: 24px;">🚪</span>
                     Log Out Session
                 </button>
-                <button class="power-btn" onclick="window.WebDeskPower.action('suspend')">
-                    <span style="font-size: 24px;">🌙</span>
-                    Sleep / Suspend
-                </button>
-                <button class="power-btn danger" style="grid-column: span 2;" onclick="window.WebDeskPower.action('reboot')">
-                    <span style="font-size: 24px;">🔄</span>
-                    Reboot System
-                </button>
             </div>
         </div>
     </div>
@@ -1649,12 +1641,8 @@
                 document.getElementById('webdesk_power_modal').classList.remove('open');
             },
             async action(act) {
-                if (act === 'reboot') {
-                    if (!confirm('Are you sure you want to reboot the system? This will temporarily disconnect all remote sessions.')) return;
-                } else if (act === 'logout') {
+                if (act === 'logout') {
                     if (!confirm('Log out active desktop session? Unsaved work on the desktop may be lost.')) return;
-                } else if (act === 'suspend') {
-                    if (!confirm('Put system to sleep / suspend mode?')) return;
                 }
 
                 this.closeModal();

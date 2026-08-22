@@ -684,36 +684,39 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             current_user = current_user or "remotelinuxuser"
 
             try:
+                # Helper to run a command as the current desktop user with their DBUS
+                def run_as_user(cmd_str):
+                    script = f'''
+                    export DISPLAY={display}
+                    export XAUTHORITY=$(ls -1 /home/{current_user}/.Xauthority /run/lightdm/{current_user}/xauthority /var/run/lightdm/root/:* 2>/dev/null | head -n 1)
+                    export DBUS_SESSION_BUS_ADDRESS=$(pgrep -u {current_user} -f "dbus-daemon.*session" | awk '{{system("tr \\\\0 \\\\n < /proc/"$1"/environ | grep DBUS_SESSION_BUS_ADDRESS=")}}' | head -n 1 | cut -d= -f2-)
+                    {cmd_str}
+                    '''
+                    subprocess.Popen(["su", "-", current_user, "-c", script])
+
                 if action == "lock":
                     # Lock screen via systemd / DM / X11
-                    subprocess.Popen(["loginctl", "lock-sessions"], env=env)
+                    subprocess.Popen(["loginctl", "lock-sessions"])
+                    run_as_user("xflock4; mate-screensaver-command -l; dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock; xdg-screensaver lock")
                     if shutil.which("dm-tool"):
                         subprocess.Popen(["dm-tool", "lock"], env=env)
-                    elif shutil.which("xflock4"):
-                        subprocess.Popen(["xflock4"], env=env)
-                    elif shutil.which("xdg-screensaver"):
-                        subprocess.Popen(["xdg-screensaver", "lock"], env=env)
                     self.send_json(200, {"ok": True, "success": True, "action": action, "message": "Screen locked."})
                     return
 
                 elif action in ["switch-user", "switch_user", "switchuser"]:
                     # Switch user to greeter login
+                    subprocess.Popen(["loginctl", "lock-sessions"])
                     if shutil.which("dm-tool"):
-                        subprocess.Popen(["dm-tool", "switch-to-greeter"], env=env)
+                        run_as_user("dm-tool switch-to-greeter")
                     elif shutil.which("gdmflexiserver"):
-                        subprocess.Popen(["gdmflexiserver"], env=env)
-                    else:
-                        subprocess.Popen(["loginctl", "lock-sessions"], env=env)
+                        run_as_user("gdmflexiserver")
                     self.send_json(200, {"ok": True, "success": True, "action": action, "message": "Switched to login greeter."})
                     return
 
                 elif action == "logout":
                     # Terminate user session
-                    subprocess.Popen(["loginctl", "terminate-user", current_user], env=env)
-                    if shutil.which("gnome-session-quit"):
-                        subprocess.Popen(["gnome-session-quit", "--logout", "--no-prompt"], env=env)
-                    elif shutil.which("pkill"):
-                        subprocess.Popen(["pkill", "-u", current_user, "xfce4-session|lxsession|mate-session"], env=env)
+                    subprocess.Popen(["loginctl", "terminate-user", current_user])
+                    run_as_user("gnome-session-quit --logout --no-prompt; pkill -f 'xfce4-session|lxsession|mate-session|gnome-session'")
                     self.send_json(200, {"ok": True, "success": True, "action": action, "message": f"Session for '{current_user}' logged out."})
                     return
 
