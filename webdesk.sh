@@ -454,7 +454,15 @@ start_webdesk() {
     DISP_INFO=$(get_active_display_and_auth)
     DETECTED_DISP=$(echo "$DISP_INFO" | cut -d'|' -f1)
     DETECTED_AUTH=$(echo "$DISP_INFO" | cut -d'|' -f2)
-    [ -n "$DETECTED_DISP" ] && DISPLAY_NUM="${DISPLAY:-$DETECTED_DISP}"
+
+    # Filter out SSH forwarding displays (e.g. :10.0, :1001.0)
+    if [ -n "$DETECTED_DISP" ]; then
+        DISPLAY_NUM="$DETECTED_DISP"
+    elif [ -n "$DISPLAY" ] && [[ ! "$DISPLAY" =~ ^(localhost)?:?[1-9][0-9]+\.? ]]; then
+        DISPLAY_NUM="$DISPLAY"
+    else
+        DISPLAY_NUM=":0"
+    fi
 
     AUTH_FLAG=""
     if [ -n "$DETECTED_AUTH" ] && [ -r "$DETECTED_AUTH" ]; then
@@ -463,6 +471,7 @@ start_webdesk() {
         AUTH_FLAG="-auth guess"
     fi
 
+    # Start x11vnc with fallback ladder
     # shellcheck disable=SC2086
     "${VNC_ROOT}/usr/bin/x11vnc" \
         -display "${DISPLAY_NUM}" \
@@ -483,7 +492,18 @@ start_webdesk() {
                 -rfbport "${VNC_PORT}" \
                 ${VNC_TUNING} \
                 ${PASS_OPT} \
-                -bg >/dev/null 2>&1
+                -bg >/dev/null 2>&1 || {
+                    "${VNC_ROOT}/usr/bin/x11vnc" \
+                        -display :0 \
+                        -auth guess \
+                        -forever \
+                        -shared \
+                        -listen 127.0.0.1 \
+                        -rfbport "${VNC_PORT}" \
+                        ${VNC_TUNING} \
+                        ${PASS_OPT} \
+                        -bg >/dev/null 2>&1 || true
+                }
         }
 
     # Start websockify daemon with TLS/SSL
@@ -514,7 +534,9 @@ start_webdesk() {
         done
         echo ""
     else
-        echo -e "${RED}[!] Failed to start WebDesk. Check if display ${DISPLAY_NUM} is active.${NC}"
+        echo -e "${RED}[!] Failed to start WebDesk backend.${NC}"
+        echo -e "${YELLOW}--> Tip: If connecting over SSH, make sure a local desktop display (:0) or login screen (LightDM/GDM) is active on the host machine.${NC}"
+        echo -e "${YELLOW}--> Run Option 6 or 'sudo webdesk install-service' to enable 24/7 background Login Screen streaming.${NC}\n"
         exit 1
     fi
 }
@@ -532,48 +554,52 @@ get_active_display_and_auth() {
     local active_auth=""
     local active_vt=""
 
-    # 1. Read active console VT (e.g. tty7, tty8) from sysfs
-    if [ -r "/sys/class/tty/tty0/active" ]; then
-        active_vt=$(cat /sys/class/tty/tty0/active 2>/dev/null || true)
+    # 1. First priority: Inspect real running Xorg / X11 server process
+    local xorg_match=""
+    xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] |Xwayland' | grep -v 'grep' | head -n 1 || true)
+    if [ -n "$xorg_match" ]; then
+        active_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo "")
+        active_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
     fi
 
-    # 2. Check systemd-logind active session on seat0
-    if command -v loginctl >/dev/null 2>&1; then
-        local active_session
-        active_session=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
-        if [ -n "$active_session" ]; then
-            active_disp=$(loginctl show-session "$active_session" -p Display --value 2>/dev/null || true)
-            if [ -z "$active_vt" ]; then
-                local vtnr
-                vtnr=$(loginctl show-session "$active_session" -p VTNr --value 2>/dev/null || true)
-                [ -n "$vtnr" ] && active_vt="tty${vtnr}"
+    # 2. Check active console VT (e.g. tty7, tty8) from sysfs
+    if [ -z "$active_disp" ] && [ -r "/sys/class/tty/tty0/active" ]; then
+        active_vt=$(cat /sys/class/tty/tty0/active 2>/dev/null || true)
+        if [ -n "$active_vt" ]; then
+            local vt_match
+            vt_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | grep "$active_vt" | head -n 1 || true)
+            if [ -n "$vt_match" ]; then
+                active_disp=$(echo "$vt_match" | grep -oP ':\d+' | head -n 1 || echo "")
+                active_auth=$(echo "$vt_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
             fi
         fi
     fi
 
-    # 3. Match running Xorg process with the active VT or display
-    local xorg_match=""
-    if [ -n "$active_vt" ]; then
-        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -w "$active_vt" | head -n 1 || true)
-        if [ -z "$xorg_match" ]; then
-            xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep "$active_vt" | head -n 1 || true)
+    # 3. Check systemd-logind active session on seat0 (ignoring SSH remote displays)
+    if [ -z "$active_disp" ] && command -v loginctl >/dev/null 2>&1; then
+        local active_session
+        active_session=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
+        if [ -n "$active_session" ]; then
+            local sess_disp
+            sess_disp=$(loginctl show-session "$active_session" -p Display --value 2>/dev/null || true)
+            if [ -n "$sess_disp" ] && [[ ! "$sess_disp" =~ ^(localhost)?:?[1-9][0-9]+\.? ]]; then
+                active_disp="$sess_disp"
+            fi
         fi
     fi
-    if [ -z "$xorg_match" ] && [ -n "$active_disp" ]; then
-        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -w "$active_disp" | head -n 1 || true)
-    fi
-    if [ -z "$xorg_match" ]; then
-        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | tail -n 1 || true)
+
+    # 4. Check for active X11 unix domain socket
+    if [ -z "$active_disp" ]; then
+        if [ -S "/tmp/.X11-unix/X0" ]; then
+            active_disp=":0"
+        elif [ -S "/tmp/.X11-unix/X1" ]; then
+            active_disp=":1"
+        else
+            active_disp=":0"
+        fi
     fi
 
-    if [ -n "$xorg_match" ]; then
-        [ -z "$active_disp" ] && active_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo ":0")
-        active_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
-    fi
-
-    [ -z "$active_disp" ] && active_disp=":0"
-
-    # 4. Fallback auth file locations
+    # 5. Locate auth file
     if [ -z "$active_auth" ] || [ ! -r "$active_auth" ]; then
         if [ -r "/var/run/lightdm/root/${active_disp}" ]; then
             active_auth="/var/run/lightdm/root/${active_disp}"
@@ -583,6 +609,8 @@ get_active_display_and_auth() {
             active_auth="/run/lightdm/${REAL_USER}/xauthority"
         elif [ -r "${USER_HOME}/.Xauthority" ]; then
             active_auth="${USER_HOME}/.Xauthority"
+        elif [ -r "${HOME}/.Xauthority" ]; then
+            active_auth="${HOME}/.Xauthority"
         fi
     fi
 
@@ -593,7 +621,10 @@ get_active_display_and_auth() {
 run_system_service() {
     export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
     export HOME="${USER_HOME}"
-    MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//')
+    MULTIARCH_DIRS=""
+    if [ -d "${VNC_ROOT}/usr/lib" ]; then
+        MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//' || true)
+    fi
     export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
     export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
     export PATH="${VNC_ROOT}/usr/bin:${PATH}"
