@@ -656,7 +656,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             display = os.environ.get("DISPLAY", ":0")
             env = dict(os.environ, DISPLAY=display)
 
-            current_user = os.environ.get("USER")
+            current_user = os.environ.get("USER") or os.environ.get("LOGNAME")
             if not current_user or current_user == "root":
                 try:
                     for u in sorted(os.listdir("/home")):
@@ -665,7 +665,16 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                             break
                 except Exception:
                     pass
-            current_user = current_user or "sandeep"
+            if not current_user or current_user == "root":
+                try:
+                    import pwd
+                    for p in pwd.getpwall():
+                        if p.pw_uid >= 1000 and not p.pw_name.startswith("nobody"):
+                            current_user = p.pw_name
+                            break
+                except Exception:
+                    pass
+            current_user = current_user or "remotelinuxuser"
 
             try:
                 if action == "lock":

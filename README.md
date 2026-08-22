@@ -16,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -
 | Client Type | Endpoint | Credentials | Details |
 | :--- | :--- | :--- | :--- |
 | **🌐 Any Web Browser** (Chrome/Edge/Safari/Firefox) | `https://<Linux_IP>:6080/` | WebDesk Users (`admin:admin123`, `user:user123`, `guest:guest123`) | Glassmorphic portal with Floating Action Hub, audio, file transfers & Linux shortcuts. |
-| **🪟 Windows Remote Desktop** (`mstsc.exe`) | `<Linux_IP>:3389` | Linux System User (`sandeep` + Linux Password) | Native Windows RDP client with 3 session modes (Mirror `:0`, Virtual Session, or Multi-User). |
+| **🪟 Windows Remote Desktop** (`mstsc.exe`) | `<Linux_IP>:3389` | Linux System User (`remotelinuxuser` + Linux Password) | Native Windows RDP client with 3 session modes (Mirror `:0`, Virtual Session, or Multi-User). |
 
 ---
 
@@ -305,7 +305,7 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 | Mode | Name | How It Works & Best Use Case |
 | :--- | :--- | :--- |
 | **Mode 1** | **🪞 Live Desktop Mirror (`:0`)** | Connects Windows directly to the active physical monitor / WebDesk web client (`127.0.0.1:5900`). You see and control the exact same live screen. |
-| **Mode 2** | **🖥️ Dedicated Virtual Session** | Opens an independent, high-speed virtual X11 desktop for your existing Linux user account (`sandeep`) with full access to personal `/home` files. |
+| **Mode 2** | **🖥️ Dedicated Virtual Session** | Opens an independent, high-speed virtual X11 desktop for your existing Linux user account (`remotelinuxuser`) with full access to personal `/home` files. |
 | **Mode 3** | **👥 Multi-User Simultaneous Workstation** | Allows a secondary Linux user (e.g. `remoteuser`) to work simultaneously without sharing the mouse with the local user. |
 
 <details>
@@ -315,7 +315,7 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `mstsc`, and press **Enter**.
 2. In the **Computer** field, enter your Linux IP and port (e.g. `192.168.1.25:3389`).
 3. Click **Connect**.
-4. Enter your Linux username (`sandeep`) and system password.
+4. Enter your Linux username (`remotelinuxuser`) and system password.
 
 #### RDP CLI Commands:
 ```bash
