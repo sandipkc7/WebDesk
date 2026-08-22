@@ -270,36 +270,50 @@ install_webdesk() {
     ensure_index_page
 
     # Master Security Initialization (Interactive vs Non-Interactive)
-    local init_mp_choice="2"
+    local init_mp_choice="1"
+    local today_pass="Pass@$(date +%a)$(date +%-d)"
     if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
-        echo -e "\n${CYAN}==============================================================${NC}"
-        echo -e "  ${BOLD}[🔒 Master Security Setup]${NC}"
-        echo -e "  WebDesk protects administrative operations with a Master Password."
-        echo -e "  Choose your preferred Master Password mode:\n"
-        echo -e "    ${BOLD}1)${NC} ✍️  Set your own Custom Master Password (Recommended)"
-        echo -e "    ${BOLD}2)${NC} 🔄 Use Default Dynamic Daily Rule (Pass@<Day><Date>, e.g. Pass@$(date +%a)$(date +%-d))"
-        echo -e "${CYAN}==============================================================${NC}"
-        read -rp "Select mode [1-2, default 1]: " init_mp_choice < /dev/tty 2>/dev/null || init_mp_choice="2"
+        clear 2>/dev/null || true
+        echo -e "\n${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════════════╗"
+        echo -e "║                 🔒 WebDesk Master Password Setup                     ║"
+        echo -e "╚══════════════════════════════════════════════════════════════════════╝${NC}\n"
+        echo -e "  The ${BOLD}Master Password${NC} is required to access the terminal administration menu,"
+        echo -e "  manage web users, view audit logs, and configure XRDP settings.\n"
+        echo -e "  ${BOLD}Choose your preferred authentication mode:${NC}\n"
+        echo -e "    ${GREEN}${BOLD}[1] Custom Master Password (Recommended)${NC}"
+        echo -e "        • Set a static permanent password of your choice (minimum 6 characters)."
+        echo -e "        • Best if you want a fixed, memorable password.\n"
+        echo -e "    ${YELLOW}${BOLD}[2] Dynamic Daily Rule (Automatic / Rotating)${NC}"
+        echo -e "        • Formula: ${BOLD}Pass@<Day><Date>${NC} (e.g. ${CYAN}${BOLD}${today_pass}${NC} for today)."
+        echo -e "        • Changes automatically at midnight for time-based rotation."
+        echo -e "        • No need to remember custom passwords.\n"
+        echo -e "${CYAN}────────────────────────────────────────────────────────────────────────${NC}"
 
-        if [ "$init_mp_choice" = "1" ]; then
-            while true; do
-                read -rsp "Enter custom Master Password (min 6 characters): " init_pw < /dev/tty 2>/dev/null || true
-                echo ""
-                if [ -z "${init_pw}" ]; then
-                    init_mp_choice="2"
-                    break
-                fi
-                if [ ${#init_pw} -lt 6 ]; then
-                    echo -e "${RED}Password must be at least 6 characters long. Try again.${NC}"
-                    continue
-                fi
-                read -rsp "Confirm custom Master Password: " init_pw_conf < /dev/tty 2>/dev/null || true
-                echo ""
-                if [ "$init_pw" != "$init_pw_conf" ]; then
-                    echo -e "${RED}Passwords do not match. Try again.${NC}"
-                    continue
-                fi
-                python3 -c "
+        while true; do
+            read -rp "Select mode [1 or 2] (Default: 1): " init_mp_choice < /dev/tty 2>/dev/null || init_mp_choice="1"
+            [ -z "$init_mp_choice" ] && init_mp_choice="1"
+
+            if [ "$init_mp_choice" = "1" ]; then
+                echo -e "\n${BLUE}${BOLD}--> Setting Custom Master Password:${NC}"
+                while true; do
+                    read -rsp "  🔑 Enter Master Password (min 6 characters): " init_pw < /dev/tty 2>/dev/null || true
+                    echo ""
+                    if [ -z "${init_pw}" ]; then
+                        echo -e "  ${YELLOW}Password cannot be empty. Try again or enter Ctrl+C to exit.${NC}"
+                        continue
+                    fi
+                    if [ ${#init_pw} -lt 6 ]; then
+                        echo -e "  ${RED}✖ Password must be at least 6 characters long. Try again.${NC}"
+                        continue
+                    fi
+                    read -rsp "  🔑 Confirm Master Password: " init_pw_conf < /dev/tty 2>/dev/null || true
+                    echo ""
+                    if [ "$init_pw" != "$init_pw_conf" ]; then
+                        echo -e "  ${RED}✖ Passwords do not match. Try again.${NC}\n"
+                        continue
+                    fi
+
+                    python3 -c "
 import sys
 sys.path.insert(0, sys.argv[1])
 sys.path.insert(0, sys.argv[2] + '/src')
@@ -307,13 +321,28 @@ sys.path.insert(0, sys.argv[2])
 import user_auth
 user_auth.set_custom_master_password(sys.argv[3])
 " "${INSTALL_DIR}" "${SCRIPT_DIR}" "${init_pw}" 2>/dev/null || true
-                echo -e "${GREEN}✔ Custom Master Password saved successfully.${NC}\n"
+                    echo -e "\n  ${GREEN}${BOLD}✔ Custom Master Password saved successfully!${NC}\n"
+                    break
+                done
                 break
-            done
-        fi
-    fi
-
-    if [ "$init_mp_choice" = "2" ]; then
+            elif [ "$init_mp_choice" = "2" ]; then
+                python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+import user_auth
+user_auth.reset_master_password_to_rule()
+" 2>/dev/null || true
+                echo -e "\n  ${GREEN}${BOLD}✔ Dynamic Daily Rule Activated!${NC}"
+                echo -e "  👉 Today's Master Password is: ${CYAN}${BOLD}${today_pass}${NC}\n"
+                break
+            else
+                echo -e "${RED}Invalid selection. Please enter 1 or 2.${NC}"
+            fi
+        done
+    else
+        # Non-interactive fallback: default to dynamic rule
         python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
@@ -322,7 +351,6 @@ sys.path.insert(0, '${SCRIPT_DIR}')
 import user_auth
 user_auth.reset_master_password_to_rule()
 " 2>/dev/null || true
-        echo -e "${GREEN}✔ Configured with Dynamic Rule (Today's password: Pass@$(date +%a)$(date +%-d))${NC}\n"
     fi
 
     # Automatic Firewall Configuration (UFW / iptables)
