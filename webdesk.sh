@@ -1266,12 +1266,23 @@ is_rdp_active() {
 }
 
 detect_desktop_session() {
-    if command -v xfce4-session >/dev/null 2>&1; then
-        echo "xfce4-session"
+    # Check active session first
+    if [ -n "$DESKTOP_SESSION" ]; then
+        case "$(echo "$DESKTOP_SESSION" | tr '[:upper:]' '[:lower:]')" in
+            *mate*) echo "mate-session" ; return ;;
+            *cinnamon*) echo "cinnamon-session" ; return ;;
+            *xfce*) echo "xfce4-session" ; return ;;
+            *lxde*) echo "startlxde" ; return ;;
+            *lxqt*) echo "startlxqt" ; return ;;
+            *gnome*) echo "gnome-session" ; return ;;
+        esac
+    fi
+    if command -v mate-session >/dev/null 2>&1; then
+        echo "mate-session"
     elif command -v cinnamon-session >/dev/null 2>&1; then
         echo "cinnamon-session"
-    elif command -v mate-session >/dev/null 2>&1; then
-        echo "mate-session"
+    elif command -v xfce4-session >/dev/null 2>&1; then
+        echo "xfce4-session"
     elif command -v startlxde >/dev/null 2>&1; then
         echo "startlxde"
     elif command -v startlxqt >/dev/null 2>&1; then
@@ -1289,22 +1300,56 @@ ensure_user_xsession() {
     u_home=$(getent passwd "${target_u}" 2>/dev/null | cut -d: -f6 || echo "${USER_HOME}")
     local sess
     sess=$(detect_desktop_session)
+    local xdg_desk="MATE"
+    local desk_sess="mate"
+
+    case "${sess}" in
+        mate-session)
+            xdg_desk="MATE"
+            desk_sess="mate"
+            ;;
+        cinnamon-session)
+            xdg_desk="X-Cinnamon"
+            desk_sess="cinnamon"
+            ;;
+        xfce4-session)
+            xdg_desk="XFCE"
+            desk_sess="xfce"
+            ;;
+        startlxde)
+            xdg_desk="LXDE"
+            desk_sess="LXDE"
+            ;;
+        startlxqt)
+            xdg_desk="LXQt"
+            desk_sess="lxqt"
+            ;;
+        gnome-session)
+            xdg_desk="GNOME"
+            desk_sess="gnome"
+            ;;
+    esac
 
     if [ -d "${u_home}" ]; then
-        if [ ! -f "${u_home}/.xsession" ] || [ ! -s "${u_home}/.xsession" ]; then
-            echo "${sess}" > "${u_home}/.xsession"
-            chmod +x "${u_home}/.xsession"
-            chown "${target_u}:${target_u}" "${u_home}/.xsession" 2>/dev/null || true
-        fi
-        if [ ! -f "${u_home}/.xsessionrc" ]; then
-            cat << 'EOF' > "${u_home}/.xsessionrc"
-export GNOME_SHELL_SESSION_MODE=classic
-export XDG_CURRENT_DESKTOP=XFCE
-export DESKTOP_SESSION=xfce
+        cat << EOF > "${u_home}/.xsessionrc"
+unset DBUS_SESSION_BUS_ADDRESS
+unset XDG_RUNTIME_DIR
+export XDG_CURRENT_DESKTOP=${xdg_desk}
+export DESKTOP_SESSION=${desk_sess}
 EOF
-            chmod +x "${u_home}/.xsessionrc"
-            chown "${target_u}:${target_u}" "${u_home}/.xsessionrc" 2>/dev/null || true
-        fi
+        chmod +x "${u_home}/.xsessionrc"
+        chown "${target_u}:${target_u}" "${u_home}/.xsessionrc" 2>/dev/null || true
+
+        cat << EOF > "${u_home}/.xsession"
+#!/bin/sh
+unset DBUS_SESSION_BUS_ADDRESS
+unset XDG_RUNTIME_DIR
+export XDG_CURRENT_DESKTOP=${xdg_desk}
+export DESKTOP_SESSION=${desk_sess}
+exec ${sess}
+EOF
+        chmod +x "${u_home}/.xsession"
+        chown "${target_u}:${target_u}" "${u_home}/.xsession" 2>/dev/null || true
     fi
 }
 
