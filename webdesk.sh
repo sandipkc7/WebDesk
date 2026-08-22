@@ -51,6 +51,10 @@ else
     PROFILE="${DEFAULT_PROFILE}"
 fi
 
+RDP_PORT="${RDP_PORT:-3389}"
+RDP_MODE="${RDP_MODE:-1}"
+RDP_ENABLED="${RDP_ENABLED:-false}"
+
 export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
 export PATH="${VNC_ROOT}/usr/bin:${PATH}"
@@ -753,10 +757,24 @@ status_webdesk() {
         else
             echo -e "  Password Protect : ${YELLOW}Disabled (No password)${NC}"
         fi
+        if is_rdp_active; then
+            local rdp_mode_desc="Mode 1: Live Mirror (:0)"
+            [ "${RDP_MODE}" = "2" ] && rdp_mode_desc="Mode 2: Dedicated Virtual Session (${REAL_USER})"
+            [ "${RDP_MODE}" = "3" ] && rdp_mode_desc="Mode 3: Multi-User Simultaneous Workstation"
+            echo -e "  Windows RDP Port : ${GREEN}${BOLD}${RDP_PORT} (${rdp_mode_desc})${NC}"
+        else
+            echo -e "  Windows RDP Port : ${DIM}Inactive (Configurable in Admin -> XRDP Menu)${NC}"
+        fi
         echo -e "\n${BOLD}Encrypted Browser URLs:${NC}"
         for ip in $(get_ips); do
             echo -e "  👉 ${CYAN}https://${ip}:${WEB_PORT}/${NC}"
         done
+        if is_rdp_active; then
+            echo -e "\n${BOLD}Windows RDP Connection Endpoint (mstsc.exe):${NC}"
+            for ip in $(get_ips); do
+                echo -e "  👉 ${MAGENTA}${ip}:${RDP_PORT}${NC}"
+            done
+        fi
     else
         if is_service_installed; then
             echo -e "${RED}${BOLD}○ WebDesk is STOPPED (24/7 System Service Inactive)${NC}"
@@ -1129,14 +1147,15 @@ ADMIN_BANNER
         echo -e "  ${BOLD}1)${NC} 👥 Web User Accounts & Access Control"
         echo -e "  ${BOLD}2)${NC} 📜 Client Login & IP Address Audit Logs"
         echo -e "  ${BOLD}3)${NC} 🔑 Master Password Settings (Custom Password / Dynamic Rule)"
-        echo -e "  ${BOLD}4)${NC} 🔄 Reset All Web Users to Factory Defaults"
-        echo -e "  ${BOLD}5)${NC} 🔒 Renew / Reissue TLS/SSL Certificate"
-        echo -e "  ${BOLD}6)${NC} 📤 Export Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}7)${NC} 📥 Import Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}8)${NC} 🗑️  Completely Uninstall WebDesk"
+        echo -e "  ${BOLD}4)${NC} 🖥️  Windows Remote Desktop Protocol (XRDP Server)"
+        echo -e "  ${BOLD}5)${NC} 🔄 Reset All Web Users to Factory Defaults"
+        echo -e "  ${BOLD}6)${NC} 🔒 Renew / Reissue TLS/SSL Certificate"
+        echo -e "  ${BOLD}7)${NC} 📤 Export Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}8)${NC} 📥 Import Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}9)${NC} 🗑️  Completely Uninstall WebDesk"
         echo -e "  ${BOLD}0)${NC} ↩  Back to Main Menu\n"
 
-        read -rp "Select an option [0-8]: " adm_choice </dev/tty || break
+        read -rp "Select an option [0-9]: " adm_choice </dev/tty || break
 
         case "$adm_choice" in
             1)
@@ -1149,6 +1168,9 @@ ADMIN_BANNER
                 configure_master_password
                 ;;
             4)
+                rdp_administration_menu
+                ;;
+            5)
                 echo -e "\n${YELLOW}${BOLD}[Reset All Web Users to Factory Defaults]${NC}"
                 echo -e "${RED}This will reset the user database to standard default accounts:${NC}"
                 echo -e "  • ${BOLD}admin${NC} -> password: ${BOLD}admin123${NC} (Role: Admin)"
@@ -1176,11 +1198,11 @@ except Exception as e:
                 fi
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            5)
+            6)
                 renew_cert
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            6)
+            7)
                 echo -e "\n${BLUE}${BOLD}[Export Full WebDesk Configuration]${NC}"
                 default_exp="${USER_HOME}/webdesk_config_backup.json"
                 read -rp "Enter destination path [default: ${default_exp}]: " exp_dest </dev/tty || true
@@ -1199,7 +1221,7 @@ except Exception as e:
 " "${INSTALL_DIR}" "${SCRIPT_DIR}" "${exp_dest}" 2>&1 || true
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            7)
+            8)
                 echo -e "\n${YELLOW}${BOLD}[Import Full WebDesk Configuration]${NC}"
                 read -rp "Enter path to configuration JSON file: " imp_src </dev/tty || true
                 if [ -n "$imp_src" ]; then
@@ -1220,9 +1242,404 @@ except Exception as e:
                 fi
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            8)
+            9)
                 remove_webdesk
                 pause_prompt "Press Enter to return to administration menu..."
+                ;;
+            0|*)
+                break
+                ;;
+        esac
+    done
+}
+
+# ==============================================================================
+# Windows Remote Desktop Protocol (XRDP) Module
+# ==============================================================================
+
+is_rdp_installed() {
+    command -v xrdp >/dev/null 2>&1 && command -v xrdp-sesman >/dev/null 2>&1
+}
+
+is_rdp_active() {
+    systemctl is-active xrdp >/dev/null 2>&1 || pgrep -x xrdp >/dev/null 2>&1
+}
+
+detect_desktop_session() {
+    if command -v xfce4-session >/dev/null 2>&1; then
+        echo "xfce4-session"
+    elif command -v cinnamon-session >/dev/null 2>&1; then
+        echo "cinnamon-session"
+    elif command -v mate-session >/dev/null 2>&1; then
+        echo "mate-session"
+    elif command -v startlxde >/dev/null 2>&1; then
+        echo "startlxde"
+    elif command -v startlxqt >/dev/null 2>&1; then
+        echo "startlxqt"
+    elif command -v gnome-session >/dev/null 2>&1; then
+        echo "gnome-session"
+    else
+        echo "x-session-manager"
+    fi
+}
+
+ensure_user_xsession() {
+    local target_u="${1:-$REAL_USER}"
+    local u_home
+    u_home=$(getent passwd "${target_u}" 2>/dev/null | cut -d: -f6 || echo "${USER_HOME}")
+    local sess
+    sess=$(detect_desktop_session)
+
+    if [ -d "${u_home}" ]; then
+        if [ ! -f "${u_home}/.xsession" ] || [ ! -s "${u_home}/.xsession" ]; then
+            echo "${sess}" > "${u_home}/.xsession"
+            chmod +x "${u_home}/.xsession"
+            chown "${target_u}:${target_u}" "${u_home}/.xsession" 2>/dev/null || true
+        fi
+        if [ ! -f "${u_home}/.xsessionrc" ]; then
+            cat << 'EOF' > "${u_home}/.xsessionrc"
+export GNOME_SHELL_SESSION_MODE=classic
+export XDG_CURRENT_DESKTOP=XFCE
+export DESKTOP_SESSION=xfce
+EOF
+            chmod +x "${u_home}/.xsessionrc"
+            chown "${target_u}:${target_u}" "${u_home}/.xsessionrc" 2>/dev/null || true
+        fi
+    fi
+}
+
+apply_rdp_config() {
+    local mode="${1:-$RDP_MODE}"
+    local port="${2:-$RDP_PORT}"
+
+    if [ ! -f /etc/xrdp/xrdp.ini ]; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}Configuring XRDP server for Mode ${mode} on port ${port}...${NC}"
+
+    sudo python3 -c "
+import re, sys
+
+ini_path = '/etc/xrdp/xrdp.ini'
+mode = '${mode}'
+port = '${port}'
+
+try:
+    with open(ini_path, 'r') as f:
+        content = f.read()
+
+    # Update port
+    content = re.sub(r'^port=\d+', f'port={port}', content, flags=re.MULTILINE)
+
+    mirror_block = '''[Live-Desktop-Mirror]
+name=Live Desktop Mirror (:0)
+lib=libvnc.so
+ip=127.0.0.1
+port=5900
+username=na
+password=ask
+'''
+
+    if mode == '1':
+        if '[Live-Desktop-Mirror]' not in content:
+            content = content.replace('[Xorg]', mirror_block + '\n[Xorg]')
+
+    with open(ini_path, 'w') as f:
+        f.write(content)
+except Exception as e:
+    print(f'Error updating xrdp.ini: {e}', file=sys.stderr)
+" 2>/dev/null || true
+
+    RDP_MODE="${mode}"
+    RDP_PORT="${port}"
+    save_config_var "RDP_MODE" "${RDP_MODE}"
+    save_config_var "RDP_PORT" "${RDP_PORT}"
+    save_config_var "RDP_ENABLED" "true"
+}
+
+save_config_var() {
+    local var_name="${1}"
+    local var_val="${2}"
+    mkdir -p "${INSTALL_DIR}"
+    if [ -f "${CONFIG_FILE}" ]; then
+        if grep -q "^${var_name}=" "${CONFIG_FILE}"; then
+            sed -i "s/^${var_name}=.*/${var_name}=\"${var_val}\"/" "${CONFIG_FILE}"
+        else
+            echo "${var_name}=\"${var_val}\"" >> "${CONFIG_FILE}"
+        fi
+    else
+        echo "${var_name}=\"${var_val}\"" > "${CONFIG_FILE}"
+    fi
+}
+
+enable_rdp_server() {
+    echo -e "\n${BLUE}${BOLD}[Enable Windows RDP Protocol Server (XRDP)]${NC}"
+
+    if ! is_rdp_installed; then
+        echo -e "${YELLOW}--> XRDP server package is not yet installed on host.${NC}"
+        echo -e "${YELLOW}--> Installing xrdp and xorgxrdp via apt (sudo password may be required)...${NC}"
+        if [ "$EUID" -eq 0 ]; then
+            apt-get update -qq && apt-get install -y -qq xrdp xorgxrdp
+        else
+            sudo apt-get update -qq && sudo apt-get install -y -qq xrdp xorgxrdp
+        fi
+    fi
+
+    if [ "$EUID" -eq 0 ]; then
+        adduser xrdp ssl-cert 2>/dev/null || true
+    else
+        sudo adduser xrdp ssl-cert 2>/dev/null || true
+    fi
+
+    ensure_user_xsession "${REAL_USER}"
+    apply_rdp_config "${RDP_MODE}" "${RDP_PORT}"
+
+    echo -e "${YELLOW}--> Enabling and starting xrdp system service...${NC}"
+    if [ "$EUID" -eq 0 ]; then
+        systemctl enable xrdp --now 2>/dev/null || true
+        systemctl restart xrdp 2>/dev/null || true
+    else
+        sudo systemctl enable xrdp --now 2>/dev/null || true
+        sudo systemctl restart xrdp 2>/dev/null || true
+    fi
+
+    sleep 1
+    if is_rdp_active; then
+        echo -e "${GREEN}${BOLD}✔ Windows RDP Server is now ACTIVE on port ${RDP_PORT}!${NC}"
+        local rdp_mode_desc="Mode 1: Live Mirror (:0)"
+        [ "${RDP_MODE}" = "2" ] && rdp_mode_desc="Mode 2: Dedicated Virtual Session (${REAL_USER})"
+        [ "${RDP_MODE}" = "3" ] && rdp_mode_desc="Mode 3: Multi-User Simultaneous Workstation"
+        echo -e "  Active Mode : ${CYAN}${rdp_mode_desc}${NC}"
+        echo -e "\n${BOLD}Windows Client Connection Instructions:${NC}"
+        echo -e "  1. On Windows, press ${CYAN}Win + R${NC}, type ${CYAN}mstsc${NC}, and press Enter."
+        for ip in $(get_ips); do
+            echo -e "  2. Connect to: ${CYAN}${ip}:${RDP_PORT}${NC}"
+        done
+        echo -e "  3. Log in with your Linux username (${BOLD}${REAL_USER}${NC}) and your system password."
+    else
+        echo -e "${RED}[!] Failed to start XRDP. Please check systemctl status xrdp.${NC}"
+    fi
+}
+
+disable_rdp_server() {
+    echo -e "\n${YELLOW}${BOLD}[Disabling Windows RDP Server]${NC}"
+    if [ "$EUID" -eq 0 ]; then
+        systemctl disable xrdp --now 2>/dev/null || true
+    else
+        sudo systemctl disable xrdp --now 2>/dev/null || true
+    fi
+    save_config_var "RDP_ENABLED" "false"
+    echo -e "${GREEN}✔ Windows RDP service stopped and disabled.${NC}"
+}
+
+set_rdp_mode() {
+    local target_mode="${1:-}"
+    if [ -z "${target_mode}" ]; then
+        clear
+        echo -e "${BOLD}${MAGENTA}--- Select Windows RDP Session Mode ---${NC}\n"
+        echo -e "  ${BOLD}1)${NC} 🪞 Mode 1: Live Desktop Mirror (:0)"
+        echo -e "      ${DIM}View & control the exact same live screen as physical monitor / WebDesk web client.${NC}"
+        echo -e "  ${BOLD}2)${NC} 🖥️ Mode 2: Dedicated Virtual Session"
+        echo -e "      ${DIM}Independent high-speed virtual desktop session for existing user (${REAL_USER}).${NC}"
+        echo -e "  ${BOLD}3)${NC} 👥 Mode 3: Multi-User Simultaneous Workstation"
+        echo -e "      ${DIM}Dedicated remote user account so 2 people can work simultaneously on this PC.${NC}"
+        echo -e "  ${BOLD}0)${NC} ↩ Back\n"
+        read -rp "Select mode [0-3]: " target_mode </dev/tty || return 0
+    fi
+
+    case "${target_mode}" in
+        1)
+            RDP_MODE="1"
+            apply_rdp_config "1" "${RDP_PORT}"
+            echo -e "\n${GREEN}✔ RDP set to Mode 1: Live Desktop Mirror (:0).${NC}"
+            ;;
+        2)
+            RDP_MODE="2"
+            ensure_user_xsession "${REAL_USER}"
+            apply_rdp_config "2" "${RDP_PORT}"
+            echo -e "\n${GREEN}✔ RDP set to Mode 2: Dedicated Virtual Session (${REAL_USER}).${NC}"
+            ;;
+        3)
+            RDP_MODE="3"
+            apply_rdp_config "3" "${RDP_PORT}"
+            echo -e "\n${GREEN}✔ RDP set to Mode 3: Multi-User Simultaneous Workstation.${NC}"
+            ;;
+        0|*)
+            return 0
+            ;;
+    esac
+
+    if is_rdp_active; then
+        echo -e "${YELLOW}Restarting XRDP service to apply new mode...${NC}"
+        if [ "$EUID" -eq 0 ]; then
+            systemctl restart xrdp 2>/dev/null || true
+        else
+            sudo systemctl restart xrdp 2>/dev/null || true
+        fi
+        echo -e "${GREEN}✔ XRDP service reloaded.${NC}"
+    fi
+}
+
+create_rdp_secondary_user() {
+    echo -e "\n${BLUE}${BOLD}[Create Secondary Linux User for Multi-User Simultaneous Mode]${NC}"
+    echo -e "${DIM}This allows a remote user to connect via Windows RDP simultaneously without interfering with your session.${NC}\n"
+    read -rp "Enter new Linux username (e.g. remoteuser): " new_u </dev/tty || return 0
+    new_u=$(echo "$new_u" | tr -dc 'a-zA-Z0-9_-')
+
+    if [ -z "$new_u" ]; then
+        echo -e "${RED}Invalid username.${NC}"
+        return 1
+    fi
+
+    if id "$new_u" >/dev/null 2>&1; then
+        echo -e "${YELLOW}User '$new_u' already exists on this system.${NC}"
+    else
+        read -rsp "Enter password for '$new_u': " new_p </dev/tty || return 0
+        echo ""
+        read -rsp "Confirm password: " new_p2 </dev/tty || return 0
+        echo ""
+
+        if [ "$new_p" != "$new_p2" ] || [ -z "$new_p" ]; then
+            echo -e "${RED}Passwords do not match or are empty.${NC}"
+            return 1
+        fi
+
+        echo -e "${YELLOW}Creating user account '$new_u'...${NC}"
+        if [ "$EUID" -eq 0 ]; then
+            useradd -m -s /bin/bash -G audio,video,plugdev,netdev "${new_u}"
+            echo "${new_u}:${new_p}" | chpasswd
+        else
+            sudo useradd -m -s /bin/bash -G audio,video,plugdev,netdev "${new_u}"
+            echo "${new_u}:${new_p}" | sudo chpasswd
+        fi
+        echo -e "${GREEN}✔ User '$new_u' created successfully.${NC}"
+    fi
+
+    ensure_user_xsession "${new_u}"
+    echo -e "${GREEN}✔ Desktop session configured for '$new_u'.${NC}"
+    echo -e "\n${BOLD}Remote Login Details:${NC}"
+    echo -e "  • Username : ${CYAN}${new_u}${NC}"
+    echo -e "  • RDP Host : ${CYAN}<IP>:${RDP_PORT}${NC}"
+}
+
+show_rdp_status() {
+    echo -e "\n${BOLD}${CYAN}--- Windows RDP Protocol Server Status ---${NC}"
+    if is_rdp_active; then
+        echo -e "  Service Status   : ${GREEN}${BOLD}● ACTIVE & LISTENING${NC}"
+        local rdp_mode_desc="Mode 1: Live Mirror (:0)"
+        [ "${RDP_MODE}" = "2" ] && rdp_mode_desc="Mode 2: Dedicated Virtual Session (${REAL_USER})"
+        [ "${RDP_MODE}" = "3" ] && rdp_mode_desc="Mode 3: Multi-User Simultaneous Workstation"
+        echo -e "  Active Mode      : ${MAGENTA}${BOLD}${rdp_mode_desc}${NC}"
+        echo -e "  Listening Port   : ${CYAN}${RDP_PORT}${NC}"
+
+        echo -e "\n${BOLD}Active Windows RDP Client Connections:${NC}"
+        local conn
+        conn=$(ss -tnp "( sport = :${RDP_PORT} )" 2>/dev/null | grep -v "State" || true)
+        if [ -n "$conn" ]; then
+            echo -e "${GREEN}${conn}${NC}"
+        else
+            echo -e "  ${DIM}No active client connections at this moment.${NC}"
+        fi
+
+        echo -e "\n${BOLD}Active Logged-In User Sessions (loginctl):${NC}"
+        loginctl list-sessions 2>/dev/null || true
+    else
+        if is_rdp_installed; then
+            echo -e "  Service Status   : ${RED}○ STOPPED / INACTIVE${NC}"
+        else
+            echo -e "  Service Status   : ${YELLOW}○ NOT INSTALLED (Run Option 1 to install)${NC}"
+        fi
+    fi
+}
+
+rdp_administration_menu() {
+    while true; do
+        clear
+        echo -e "${BOLD}${MAGENTA}"
+        cat << 'RDP_BANNER'
+  ____  ____  ____    ____                                 
+ |  _ \|  _ \|  _ \  / ___|  ___ _ ____   _____ _ __       
+ | |_) | | | | |_) | \___ \ / _ \ '__\ \ / / _ \ '__|      
+ |  _ <| |_| |  __/   ___) |  __/ |   \ V /  __/ |         
+ |_| \_\____/|_|     |____/ \___|_|    \_/ \___|_|         
+RDP_BANNER
+        echo -e "${NC}"
+        echo -e "  ${BOLD}Windows Remote Desktop Protocol (XRDP) Center${NC}"
+        echo -e "  ==============================================================\n"
+
+        if is_rdp_active; then
+            local rdp_mode_desc="Mode 1: Live Mirror (:0)"
+            [ "${RDP_MODE}" = "2" ] && rdp_mode_desc="Mode 2: Dedicated Virtual Session (${REAL_USER})"
+            [ "${RDP_MODE}" = "3" ] && rdp_mode_desc="Mode 3: Multi-User Simultaneous"
+            echo -e "  Status: ${GREEN}${BOLD}● ACTIVE${NC} | Port: ${CYAN}${RDP_PORT}${NC} | Mode: ${MAGENTA}${rdp_mode_desc}${NC}\n"
+        else
+            echo -e "  Status: ${RED}○ INACTIVE / DISABLED${NC}\n"
+        fi
+
+        echo -e "  ${BOLD}1)${NC} 🟢 Enable & Start Windows RDP Server (Port ${RDP_PORT})"
+        echo -e "  ${BOLD}2)${NC} 🔴 Disable & Stop Windows RDP Server"
+        echo -e "  ${BOLD}3)${NC} 🔀 Select RDP Session Mode (Mirror / Virtual / Multi-User)"
+        echo -e "  ${BOLD}4)${NC} 👥 Create Secondary Linux User for Simultaneous Mode"
+        echo -e "  ${BOLD}5)${NC} ⚙️  Configure RDP Listening Port (Current: ${RDP_PORT})"
+        echo -e "  ${BOLD}6)${NC} 📜 View RDP Service & Connected Client Sessions"
+        echo -e "  ${BOLD}7)${NC} ℹ️  Windows Connection Walkthrough (mstsc.exe)"
+        echo -e "  ${BOLD}0)${NC} ↩  Back to Administration Menu\n"
+
+        read -rp "Select an option [0-7]: " rdp_choice </dev/tty || break
+
+        case "$rdp_choice" in
+            1)
+                enable_rdp_server
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            2)
+                disable_rdp_server
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            3)
+                set_rdp_mode
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            4)
+                create_rdp_secondary_user
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            5)
+                echo -e "\n${BLUE}${BOLD}[Configure RDP Listening Port]${NC}"
+                read -rp "Enter port number [default: 3389]: " new_port </dev/tty || true
+                new_port="${new_port:-3389}"
+                if [[ "$new_port" =~ ^[0-9]+$ ]] && [ "$new_port" -ge 1 ] && [ "$new_port" -le 65535 ]; then
+                    RDP_PORT="${new_port}"
+                    apply_rdp_config "${RDP_MODE}" "${RDP_PORT}"
+                    echo -e "${GREEN}✔ RDP port updated to ${RDP_PORT}.${NC}"
+                else
+                    echo -e "${RED}Invalid port number.${NC}"
+                fi
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            6)
+                show_rdp_status
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            7)
+                clear
+                echo -e "${BOLD}${CYAN}--- How to Connect from Windows via RDP ---${NC}\n"
+                echo -e "1. On your Windows PC, press ${CYAN}Win + R${NC}, type ${CYAN}mstsc${NC}, and hit ${BOLD}Enter${NC}."
+                echo -e "2. In the ${BOLD}Computer${NC} field, enter your Linux IP address and port:"
+                for ip in $(get_ips); do
+                    echo -e "   👉 ${BOLD}${ip}:${RDP_PORT}${NC}"
+                done
+                echo -e "\n3. Click ${BOLD}Connect${NC}."
+                echo -e "4. When the login screen appears, enter your Linux credentials:"
+                echo -e "   • Username: ${BOLD}${REAL_USER}${NC} (or secondary username if Mode 3)"
+                echo -e "   • Password: ${BOLD}<Your Linux Password>${NC}"
+                echo -e "\n${YELLOW}Mode Behaviors:${NC}"
+                echo -e "  • ${BOLD}Mode 1 (Mirror :0)${NC}      : Mirrors live physical desktop screen."
+                echo -e "  • ${BOLD}Mode 2 (Virtual)${NC}        : Standalone full-speed virtual desktop."
+                echo -e "  • ${BOLD}Mode 3 (Multi-User)${NC}     : Independent simultaneous user workspace."
+                echo ""
+                pause_prompt "Press Enter to return to RDP menu..."
                 ;;
             0|*)
                 break
@@ -1682,11 +2099,56 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
             configure_master_password
         fi
         ;;
+    rdp|rdp-menu)
+        if verify_master_password; then
+            rdp_administration_menu
+        fi
+        ;;
+    rdp-enable|rdp-start)
+        if verify_master_password; then
+            enable_rdp_server
+        fi
+        ;;
+    rdp-disable|rdp-stop)
+        if verify_master_password; then
+            disable_rdp_server
+        fi
+        ;;
+    rdp-restart)
+        if verify_master_password; then
+            if [ "$EUID" -eq 0 ]; then
+                systemctl restart xrdp 2>/dev/null || true
+            else
+                sudo systemctl restart xrdp 2>/dev/null || true
+            fi
+            echo -e "${GREEN}✔ XRDP service restarted.${NC}"
+        fi
+        ;;
+    rdp-status)
+        show_rdp_status
+        ;;
+    rdp-mode)
+        if verify_master_password; then
+            set_rdp_mode "${2:-}"
+        fi
+        ;;
+    rdp-port)
+        if verify_master_password; then
+            new_port="${2:-3389}"
+            apply_rdp_config "${RDP_MODE}" "${new_port}"
+            echo -e "${GREEN}✔ RDP port updated to ${new_port}.${NC}"
+        fi
+        ;;
+    rdp-user|rdp-create-user)
+        if verify_master_password; then
+            create_rdp_secondary_user
+        fi
+        ;;
     menu|interactive|"")
         interactive_menu
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac

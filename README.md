@@ -25,6 +25,7 @@
     * [10.7 Remote Session & Power Controls](#107-remote-session--power-controls)
     * [10.8 24/7 System Service & Login Screen Streaming](#108-247-system-service--login-screen-streaming)
     * [10.9 Native GTK Control Panel (`webdesk_gui.py`)](#109-native-gtk-control-panel-webdesk_guipy)
+    * [10.10 Dual-Protocol Server: Windows Native RDP (XRDP / Port 3389)](#1010-dual-protocol-server-windows-native-rdp-xrdp--port-3389)
 11. [Configuration Files & Database](#11-configuration-files--database)
 12. [Troubleshooting & FAQs](#12-troubleshooting--faqs)
 
@@ -32,16 +33,16 @@
 
 ## 1. Architecture & Technology Stack
 
-WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
+WebDesk unites lightweight Linux desktop technologies into a unified multi-protocol pipeline:
 
 ```
-[ Web Browser Client ]
-        │  (HTTPS / WSS on Port 6080)
-        ▼
-[ Websockify (TLS/SSL Proxy) + noVNC Web Engine ]
-        │  (Raw RFB Loopback 127.0.0.1:5900)
-        ▼
-[ x11vnc Engine ] ──► [ X11 Server (DISPLAY=:0) ] ◄── [ Desktop / Login Manager ]
+[ Web Browser Client ]                 [ Windows Remote Desktop Client (mstsc.exe) ]
+        │  (HTTPS / WSS on Port 6080)                          │  (TLS RDP on Port 3389)
+        ▼                                                      ▼
+[ Websockify + noVNC Web Engine ]                      [ XRDP Server Engine ]
+        │  (Raw RFB Loopback 127.0.0.1:5900)                   │  (Mode 1: Mirror :0 / Mode 2: Xorg)
+        ▼                                                      ▼
+[ x11vnc Engine ] ────────────────────────► [ X11 Server (DISPLAY=:0) ] ◄── [ Desktop / Login Manager ]
         ▲
         │  (REST API HTTPS on Port 6085)
         ├──────────────────────────────────────────► [ Auth DB (users.json) ]
@@ -54,8 +55,8 @@ WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
 [ WebDesk Audio Server (audio_server.py) ] ◄── [ PulseAudio / PipeWire Monitor ]
 ```
 
-* **Display Engine**: `x11vnc` attached directly to physical or virtual `DISPLAY=:0`.
-* **Transport Protocol**: Encrypted WebSocket (`wss://`) mediated by `websockify`.
+* **Display Engines**: `x11vnc` for in-browser RFB streaming + `xrdp` for Windows native RDP client connections.
+* **Transport Protocols**: Encrypted WebSocket (`wss://`) on port 6080 and TLS RDP on port 3389.
 * **Web Client**: Custom glassmorphic `noVNC` web portal with Floating Action Hub.
 * **Backend API**: Python 3 HTTPS REST API handling multi-user auth, single-session enforcement, IP audit logging, resolution switching, power commands, and file downloads.
 * **Audio Engine**: PulseAudio/PipeWire monitor source streamed as raw PCM / Web Audio API.
@@ -69,6 +70,7 @@ WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
 | Port | Protocol | Service | Description |
 | :--- | :--- | :--- | :--- |
 | **`6080`** | `HTTPS` / `WSS` | Web Portal & noVNC | Primary web interface and encrypted VNC WebSocket |
+| **`3389`** | `TLS RDP` | Windows XRDP Server | Native Windows Remote Desktop Connection (`mstsc.exe`) |
 | **`6085`** | `HTTPS` | WebDesk API | Multi-user authentication, file transfers, and system control |
 | **`6086`** | `WSS` | Audio Streamer | Low-latency live desktop audio stream |
 | **`5900`** | `TCP` (Internal) | x11vnc RFB | Local loopback stream (`127.0.0.1` only, blocked from WAN) |
@@ -501,6 +503,37 @@ WebDesk can run as a persistent `systemd` service (`webdesk.service`):
 A modern desktop GUI application is included for graphical control:
 * Run with: `python3 webdesk_gui.py` or Menu Option `8`.
 * Features live start/stop toggles, profile switcher, resolution picker, visual user account manager with suspension/kick buttons, and theme toggling (Dark / Light / System).
+
+---
+
+### 10.10 Dual-Protocol Server: Windows Native RDP (XRDP / Port 3389)
+
+WebDesk supports **Microsoft Remote Desktop Protocol (RDP)**, allowing native Windows clients (`mstsc.exe`) to connect directly to the Linux desktop alongside the in-browser WebDesk client.
+
+#### 🔀 The 3 Configurable RDP Session Modes
+
+| Mode | Name | Description |
+| :--- | :--- | :--- |
+| **Mode 1** | **🪞 Live Desktop Mirror (`:0`)** | Connects Windows directly to the active physical monitor / WebDesk web client (`127.0.0.1:5900`). You see and control the exact same live screen. |
+| **Mode 2** | **🖥️ Dedicated Virtual Session** | Opens an independent, high-speed virtual X11 desktop for your existing Linux user account with access to all your personal `/home` files. |
+| **Mode 3** | **👥 Multi-User Simultaneous Workstation** | Allows a secondary Linux user (e.g. `remoteuser`) to log in and work simultaneously without interfering with the local user. |
+
+#### 🛠️ RDP CLI Commands
+```bash
+webdesk rdp-enable          # Installs, configures, and starts XRDP on port 3389
+webdesk rdp-disable         # Stops and disables the XRDP service
+webdesk rdp-mode <1|2|3>    # Switches between Mode 1 (Mirror), Mode 2 (Virtual), and Mode 3 (Multi-User)
+webdesk rdp-status          # Displays active RDP listening port, mode, and connected Windows sessions
+webdesk rdp-port <PORT>     # Changes the default listening port (e.g. 3389 -> custom)
+webdesk rdp-user            # Interactive wizard to create a secondary Linux account for Mode 3
+webdesk rdp-menu            # Opens the interactive RDP configuration menu (under Administration)
+```
+
+#### 🪟 How to Connect from Windows:
+1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `mstsc`, and press **Enter**.
+2. In the **Computer** field, enter your Linux IP address and port: `192.168.1.25:3389`.
+3. Click **Connect**.
+4. At the login prompt, enter your standard Linux username (e.g., `sandeep` or secondary user) and system password.
 
 ---
 
