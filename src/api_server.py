@@ -814,7 +814,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
 
 
 def run_api_server():
-    server_address = ("127.0.0.1", PORT)
+    server_address = ("0.0.0.0", PORT)
     httpd = HTTPServer(server_address, WebDeskAPIHandler)
 
     if os.path.exists(CERT_PEM):
@@ -826,7 +826,7 @@ def run_api_server():
         ssl_ctx.load_cert_chain(certfile=CERT_CRT, keyfile=CERT_KEY)
         httpd.socket = ssl_ctx.wrap_socket(httpd.socket, server_side=True)
 
-    print(f"[WebDesk API] Listening on https://127.0.0.1:{PORT} (Loopback)...")
+    print(f"[WebDesk API] Listening on https://0.0.0.0:{PORT} (HTTPS / API)...")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

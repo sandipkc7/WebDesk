@@ -733,7 +733,14 @@ run_system_service() {
         python3 "${INSTALL_DIR}/api_server.py" -D >> "${LOG_FILE}" 2>&1 || true
     fi
 
-    # 3. Dynamic Display & Switch-User Supervisor Loop
+    # 3. Start Audio Stream daemon
+    if [ -f "${INSTALL_DIR}/audio_server.py" ]; then
+        pkill -9 -f "audio_server.py" 2>/dev/null || true
+        log_msg "Starting Audio Server on port ${AUDIO_PORT}..."
+        python3 "${INSTALL_DIR}/audio_server.py" -D >> "${LOG_FILE}" 2>&1 || true
+    fi
+
+    # 4. Dynamic Display & Switch-User Supervisor Loop
     log_msg "Entering Dynamic Display & Authentication Supervisor loop..."
     while true; do
         get_profile_flags
