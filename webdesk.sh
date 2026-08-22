@@ -2426,7 +2426,7 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         ;;
     menu|interactive|"")
-        if [ -z "${1:-}" ] && [ ! -t 0 ] && [ -z "${WEBDESK_RUNNING_UNDER_SYSTEMD:-}" ]; then
+        if [ -z "${1:-}" ] && { [ -z "${BASH_SOURCE[0]:-}" ] || [ "$0" = "bash" ] || [ "$0" = "sh" ] || [ ! -f "${INSTALL_DIR}/webdesk.sh" ]; } && [ -z "${WEBDESK_RUNNING_UNDER_SYSTEMD:-}" ]; then
             install_webdesk
         else
             interactive_menu
