@@ -1523,9 +1523,6 @@ ip=127.0.0.1
 port=5900
 username=ask
 password=ask
-pamusername=asksame
-pampassword=asksame
-pamsessionmng=127.0.0.1
 '''
 
     xorg_block = '''[Xorg]
