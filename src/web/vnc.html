@@ -433,11 +433,7 @@
                     <span class="hub-btn-icon">🔊</span>
                     <span>Audio</span>
                 </button>
-                <button class="hub-btn" id="btn_match_res" onclick="window.WebDeskRes.sync(); window.WebDeskHub.toggle(false)" title="Match Resolution">
-                    <span class="hub-btn-icon">🎯</span>
-                    <span>Match Res</span>
-                </button>
-                <button class="hub-btn" id="btn_settings" onclick="window.WebDeskSettings.openModal(); window.WebDeskHub.toggle(false)" title="Display & Scaling Settings">
+                <button class="hub-btn" id="btn_settings" onclick="window.WebDeskSettings.openModal(); window.WebDeskHub.toggle(false)" title="Display & Resolution Settings">
                     <span class="hub-btn-icon">⚙️</span>
                     <span>Display</span>
                 </button>
@@ -456,10 +452,6 @@
                 <button class="hub-btn" id="btn_manage_users" onclick="window.WebDeskAuth.openUsersModal(); window.WebDeskHub.toggle(false)" title="Manage Users">
                     <span class="hub-btn-icon">👥</span>
                     <span>Users</span>
-                </button>
-                <button class="hub-btn" id="btn_power" onclick="window.WebDeskPower.openModal(); window.WebDeskHub.toggle(false)" title="Remote Session & Power Controls">
-                    <span class="hub-btn-icon">🔒</span>
-                    <span>Power</span>
                 </button>
             </div>
         </div>
@@ -491,6 +483,19 @@
             <div class="modal-header">
                 <h3>⚙️ Display &amp; Performance Preferences</h3>
                 <button class="modal-close" onclick="window.WebDeskSettings.closeModal()">✕</button>
+            </div>
+            <div class="user-form-group">
+                <label class="user-form-label">Remote Display Resolution</label>
+                <select id="hub_setting_resolution" class="user-form-input" style="background: #0f172a;" onchange="window.WebDeskSettings.updateResolution(this.value)">
+                    <option value="auto">🎯 Auto Match (Viewport Size)</option>
+                    <option value="2560x1440">🖥️ 2560x1440 (2K)</option>
+                    <option value="1920x1080">🖥️ 1920x1080 (Full HD)</option>
+                    <option value="1600x900">🖥️ 1600x900</option>
+                    <option value="1440x900">🖥️ 1440x900</option>
+                    <option value="1366x768">🖥️ 1366x768</option>
+                    <option value="1280x720">🖥️ 1280x720 (720p)</option>
+                    <option value="1024x768">🖥️ 1024x768</option>
+                </select>
             </div>
             <div class="user-form-group">
                 <label class="user-form-label">Client Canvas Scaling</label>
@@ -629,29 +634,7 @@
         </div>
     </div>
 
-    <!-- Power & Lock Actions Modal -->
-    <div class="webdesk-modal-bg" id="webdesk_power_modal">
-        <div class="webdesk-modal-card" style="width: 380px;">
-            <div class="modal-header">
-                <h3>🔒 Remote Session &amp; Power</h3>
-                <button class="modal-close" onclick="window.WebDeskPower.closeModal()">✕</button>
-            </div>
-            <div class="power-grid">
-                <button class="power-btn" onclick="window.WebDeskPower.action('lock')">
-                    <span style="font-size: 24px;">🔒</span>
-                    Lock Screen
-                </button>
-                <button class="power-btn" onclick="window.WebDeskPower.action('switch-user')">
-                    <span style="font-size: 24px;">👥</span>
-                    Switch User
-                </button>
-                <button class="power-btn" onclick="window.WebDeskPower.action('logout')">
-                    <span style="font-size: 24px;">🚪</span>
-                    Log Out Session
-                </button>
-            </div>
-        </div>
-    </div>
+
 
     <script>
         // Enforce full-screen viewport scaling and instant auto-reconnect
@@ -747,7 +730,7 @@
                     enforceRfbViewOnly();
                     setInterval(enforceRfbViewOnly, 1000);
 
-                    const hideIds = ['btn_start', 'btn_alttab', 'btn_term', 'btn_files', 'btn_match_res', 'btn_change_pw', 'btn_manage_users', 'btn_power', 'hub_mod_bar', 'webdesk_dropzone'];
+                    const hideIds = ['btn_start', 'btn_alttab', 'btn_term', 'btn_files', 'btn_change_pw', 'btn_manage_users', 'hub_mod_bar', 'webdesk_dropzone'];
                     hideIds.forEach(id => {
                         const el = document.getElementById(id);
                         if (el) el.style.display = 'none';
@@ -765,20 +748,16 @@
                     }
                 }
 
-                // 2. Standard User: Interactive, Own Password & Power Actions, No User Management
+                // 2. Standard User: Interactive, Own Password, No User Management
                 if (role === 'user') {
-                    const powerBtn = document.getElementById('btn_power');
-                    if (powerBtn) powerBtn.style.display = 'flex';
                     const usersBtn = document.getElementById('btn_manage_users');
                     if (usersBtn) usersBtn.style.display = 'none';
                     const pwBtn = document.getElementById('btn_change_pw');
                     if (pwBtn) pwBtn.style.display = 'flex';
                 }
 
-                // 3. Admin: Full Permissions + User Management + Power Controls
+                // 3. Admin: Full Permissions + User Management
                 if (role === 'admin') {
-                    const powerBtn = document.getElementById('btn_power');
-                    if (powerBtn) powerBtn.style.display = 'flex';
                     const usersBtn = document.getElementById('btn_manage_users');
                     if (usersBtn) usersBtn.style.display = 'flex';
                     const pwBtn = document.getElementById('btn_change_pw');
@@ -1632,37 +1611,7 @@
             }
         };
 
-        // 4. WebDesk Power & Remote Session Actions
-        window.WebDeskPower = {
-            openModal() {
-                document.getElementById('webdesk_power_modal').classList.add('open');
-            },
-            closeModal() {
-                document.getElementById('webdesk_power_modal').classList.remove('open');
-            },
-            async action(act) {
-                if (act === 'logout') {
-                    if (!confirm('Log out active desktop session? Unsaved work on the desktop may be lost.')) return;
-                }
 
-                this.closeModal();
-                try {
-                    const res = await apiFetch('/api/power', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: act })
-                    });
-                    const data = await res.json();
-                    if (res.ok && data.success) {
-                        window.WebDeskRes.showToast(`✔ ${data.message || 'Action executed.'}`);
-                    } else {
-                        window.WebDeskRes.showToast(`✖ ${data.error || 'Action failed.'}`);
-                    }
-                } catch(e) {
-                    window.WebDeskRes.showToast('✖ Server communication error.');
-                }
-            }
-        };
 
         // 5. WebDesk Drag & Drop + File Downloads
         window.WebDeskFiles = {
@@ -1815,6 +1764,30 @@
                 if (cEl) {
                     document.getElementById('hub_setting_compression').value = cEl.value;
                     document.getElementById('val_compression').textContent = cEl.value;
+                }
+            },
+            async updateResolution(val) {
+                if (val === 'auto') {
+                    window.WebDeskRes.sync();
+                    this.closeModal();
+                    return;
+                }
+                this.closeModal();
+                try {
+                    const res = await apiFetch('/api/set-resolution', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ resolution: val })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        window.WebDeskRes.showToast(`✔ Display resolution set to ${val}`);
+                        setTimeout(() => { window.location.reload(); }, 1500);
+                    } else {
+                        window.WebDeskRes.showToast(`✖ ${data.error || 'Failed to set resolution'}`);
+                    }
+                } catch(e) {
+                    window.WebDeskRes.showToast('✖ Network error setting resolution');
                 }
             },
             updateScaling(val) {
