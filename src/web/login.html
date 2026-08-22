@@ -393,7 +393,22 @@
                 }
             } catch (err) {
                 console.error('Login error:', err);
-                showAlert('Authentication service unavailable over HTTPS.');
+                const certUrl = `https://${API_HOST}:${API_PORT}/api/status`;
+                const alertEl = document.getElementById('login_alert');
+                alertEl.className = 'alert-box alert-error';
+                alertEl.style.display = 'block';
+                alertEl.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 6px;">🔒 HTTPS Certificate Approval Required</div>
+                    <div style="font-size: 13px; line-height: 1.4; opacity: 0.95; margin-bottom: 10px;">
+                        Your browser is blocking the background authentication request (Port 6085) because of the self-signed SSL certificate.
+                    </div>
+                    <a href="${certUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #3b82f6; color: #fff; text-decoration: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; transition: background 0.2s;">
+                        👉 Click here to Approve Port 6085 Certificate
+                    </a>
+                    <div style="font-size: 11px; margin-top: 8px; opacity: 0.8;">
+                        (In the new tab, click <b>Advanced → Proceed</b>, then return here and click Sign In)
+                    </div>
+                `;
                 setSubmitting(false);
             }
         }
