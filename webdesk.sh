@@ -220,6 +220,54 @@ install_webdesk() {
     ensure_runtime_files
     generate_ssl_cert
     ensure_index_page
+
+    # Master Security Initialization
+    echo -e "\n${CYAN}==============================================================${NC}"
+    echo -e "  ${BOLD}[🔒 Master Security Setup]${NC}"
+    echo -e "  WebDesk protects administrative operations with a Master Password."
+    echo -e "  Choose your preferred Master Password mode:\n"
+    echo -e "    ${BOLD}1)${NC} ✍️  Set your own Custom Master Password (Recommended)"
+    echo -e "    ${BOLD}2)${NC} 🔄 Use Default Dynamic Daily Rule (Pass@<Day><Date>, e.g. Pass@$(date +%a)$(date +%-d))"
+    echo -e "${CYAN}==============================================================${NC}"
+    read -rp "Select mode [1-2, default 1]: " init_mp_choice </dev/tty || init_mp_choice="1"
+
+    if [ "$init_mp_choice" = "2" ]; then
+        python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+import user_auth
+user_auth.reset_master_password_to_rule()
+" 2>/dev/null || true
+        echo -e "${GREEN}✔ Configured with Dynamic Rule (Today's password: Pass@$(date +%a)$(date +%-d))${NC}\n"
+    else
+        while true; do
+            read -rsp "Enter custom Master Password (min 6 characters): " init_pw </dev/tty || true
+            echo ""
+            if [ ${#init_pw} -lt 6 ]; then
+                echo -e "${RED}Password must be at least 6 characters long. Try again.${NC}"
+                continue
+            fi
+            read -rsp "Confirm custom Master Password: " init_pw_conf </dev/tty || true
+            echo ""
+            if [ "$init_pw" != "$init_pw_conf" ]; then
+                echo -e "${RED}Passwords do not match. Try again.${NC}"
+                continue
+            fi
+            python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+import user_auth
+user_auth.set_custom_master_password('${init_pw}')
+" 2>/dev/null || true
+            echo -e "${GREEN}✔ Custom Master Password saved successfully.${NC}\n"
+            break
+        done
+    fi
+
     echo -e "${GREEN}${BOLD}[WebDesk] Installation completed successfully!${NC}\n"
 }
 
@@ -946,6 +994,117 @@ except Exception as e:
     done
 }
 
+configure_master_password() {
+    set +e
+    ensure_runtime_files
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}/src:${SCRIPT_DIR}:${PYTHONPATH}"
+
+    while true; do
+        clear
+        local cur_mode
+        cur_mode=$(python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    cfg = user_auth.get_master_auth_config()
+    print(cfg.get('mode', 'dynamic_rule'))
+except Exception:
+    print('dynamic_rule')
+" 2>/dev/null || echo "dynamic_rule")
+
+        echo -e "${BOLD}${CYAN}--- Master Password Configuration ---${NC}\n"
+        if [ "$cur_mode" = "custom" ]; then
+            echo -e "  Current Mode : ${GREEN}${BOLD}Custom Master Password${NC}"
+        else
+            local cur_date
+            cur_date=$(date +"Pass@%a%-d")
+            echo -e "  Current Mode : ${YELLOW}${BOLD}Dynamic Daily Rule (Pass@<Day><Date>)${NC}"
+            echo -e "  Today's Pass : ${CYAN}${BOLD}${cur_date}${NC}"
+        fi
+        echo -e "  ==============================================================\n"
+        echo -e "  ${BOLD}1)${NC} ✍️   Set Custom Master Password"
+        echo -e "  ${BOLD}2)${NC} 🔄  Revert to Default Dynamic Rule (Pass@<Day><Date>)"
+        echo -e "  ${BOLD}3)${NC} ℹ️   View Dynamic Daily Rule Details"
+        echo -e "  ${BOLD}0)${NC} ↩   Back to Administration Menu\n"
+
+        read -rp "Select an option [0-3]: " mp_choice </dev/tty || break
+
+        case "$mp_choice" in
+            1)
+                echo -e "\n${BLUE}${BOLD}[Set Custom Master Password]${NC}"
+                read -rsp "Enter new Master Password (min 6 characters): " new_mp </dev/tty || true
+                echo ""
+                if [ ${#new_mp} -lt 6 ]; then
+                    echo -e "${RED}✖ Error: Password must be at least 6 characters long.${NC}"
+                    pause_prompt "Press Enter to continue..."
+                    continue
+                fi
+                read -rsp "Confirm new Master Password: " new_mp_confirm </dev/tty || true
+                echo ""
+                if [ "$new_mp" != "$new_mp_confirm" ]; then
+                    echo -e "${RED}✖ Error: Passwords do not match.${NC}"
+                    pause_prompt "Press Enter to continue..."
+                    continue
+                fi
+
+                python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.set_custom_master_password('${new_mp}')
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                pause_prompt "Press Enter to continue..."
+                ;;
+            2)
+                echo -e "\n${YELLOW}${BOLD}[Revert to Default Dynamic Daily Rule]${NC}"
+                echo -e "This will set the master password to the standard daily formula:"
+                echo -e "  Format: ${BOLD}Pass@<Day><Date>${NC} (e.g. ${CYAN}Pass@$(date +%a)$(date +%-d)${NC})"
+                read -rp "Revert to dynamic rule? (y/N): " conf_rule </dev/tty || true
+                if [[ "$conf_rule" =~ ^[yY]$ ]]; then
+                    python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, msg = user_auth.reset_master_password_to_rule()
+    print(f'\\n\033[1;32m✔ {msg}\033[0m' if ok else f'\\n\033[1;31m✖ {msg}\033[0m')
+except Exception as e:
+    print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                fi
+                pause_prompt "Press Enter to continue..."
+                ;;
+            3)
+                clear
+                echo -e "${BOLD}${CYAN}--- Dynamic Master Password Rule Details ---${NC}\n"
+                echo -e "The dynamic master password changes automatically each calendar day."
+                echo -e "Formula: ${BOLD}Pass@<Day><Date>${NC}\n"
+                echo -e "Examples:"
+                echo -e "  • Saturday August 22nd -> ${GREEN}${BOLD}Pass@Sat22${NC}"
+                echo -e "  • Sunday August 23rd   -> ${GREEN}${BOLD}Pass@Sun23${NC}"
+                echo -e "  • Monday August 3rd    -> ${GREEN}${BOLD}Pass@Mon3${NC} (or ${GREEN}${BOLD}Pass@Mon03${NC})"
+                echo ""
+                echo -e "Today's Active Dynamic Password: ${YELLOW}${BOLD}Pass@$(date +%a)$(date +%-d)${NC}"
+                pause_prompt "Press Enter to continue..."
+                ;;
+            0|*)
+                break
+                ;;
+        esac
+    done
+}
+
 administration_menu() {
     set +e
     ensure_runtime_files
@@ -969,14 +1128,15 @@ ADMIN_BANNER
         echo -e "  ==============================================================\n"
         echo -e "  ${BOLD}1)${NC} 👥 Web User Accounts & Access Control"
         echo -e "  ${BOLD}2)${NC} 📜 Client Login & IP Address Audit Logs"
-        echo -e "  ${BOLD}3)${NC} 🔄 Reset All Web Users to Factory Defaults"
-        echo -e "  ${BOLD}4)${NC} 🔒 Renew / Reissue TLS/SSL Certificate"
-        echo -e "  ${BOLD}5)${NC} 📤 Export Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}6)${NC} 📥 Import Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}7)${NC} 🗑️  Completely Uninstall WebDesk"
+        echo -e "  ${BOLD}3)${NC} 🔑 Master Password Settings (Custom Password / Dynamic Rule)"
+        echo -e "  ${BOLD}4)${NC} 🔄 Reset All Web Users to Factory Defaults"
+        echo -e "  ${BOLD}5)${NC} 🔒 Renew / Reissue TLS/SSL Certificate"
+        echo -e "  ${BOLD}6)${NC} 📤 Export Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}7)${NC} 📥 Import Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}8)${NC} 🗑️  Completely Uninstall WebDesk"
         echo -e "  ${BOLD}0)${NC} ↩  Back to Main Menu\n"
 
-        read -rp "Select an option [0-7]: " adm_choice </dev/tty || break
+        read -rp "Select an option [0-8]: " adm_choice </dev/tty || break
 
         case "$adm_choice" in
             1)
@@ -986,6 +1146,9 @@ ADMIN_BANNER
                 view_login_audit_logs
                 ;;
             3)
+                configure_master_password
+                ;;
+            4)
                 echo -e "\n${YELLOW}${BOLD}[Reset All Web Users to Factory Defaults]${NC}"
                 echo -e "${RED}This will reset the user database to standard default accounts:${NC}"
                 echo -e "  • ${BOLD}admin${NC} -> password: ${BOLD}admin123${NC} (Role: Admin)"
@@ -1013,11 +1176,11 @@ except Exception as e:
                 fi
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            4)
+            5)
                 renew_cert
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            5)
+            6)
                 echo -e "\n${BLUE}${BOLD}[Export Full WebDesk Configuration]${NC}"
                 default_exp="${USER_HOME}/webdesk_config_backup.json"
                 read -rp "Enter destination path [default: ${default_exp}]: " exp_dest </dev/tty || true
@@ -1036,7 +1199,7 @@ except Exception as e:
 " 2>&1 || true
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            6)
+            7)
                 echo -e "\n${YELLOW}${BOLD}[Import Full WebDesk Configuration]${NC}"
                 read -rp "Enter path to configuration JSON file: " imp_src </dev/tty || true
                 if [ -n "$imp_src" ]; then
@@ -1057,7 +1220,7 @@ except Exception as e:
                 fi
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            7)
+            8)
                 remove_webdesk
                 pause_prompt "Press Enter to return to administration menu..."
                 ;;
@@ -1120,17 +1283,48 @@ AUTH_BANNER
     local cur_date
     cur_date=$(date +"%-d %b, %Y %A")
     echo -e "  ${DIM}System Date:${NC} ${CYAN}${BOLD}${cur_date}${NC}\n"
-    echo -e "  ${YELLOW}${BOLD}[🔒 Security Verification Required]${NC}"
-    echo -e "  Administration options are protected by Master Security."
+
+    local cur_mode
+    cur_mode=$(python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    cfg = user_auth.get_master_auth_config()
+    print(cfg.get('mode', 'dynamic_rule'))
+except Exception:
+    print('dynamic_rule')
+" 2>/dev/null || echo "dynamic_rule")
+
+    if [ "$cur_mode" = "custom" ]; then
+        echo -e "  ${YELLOW}${BOLD}[🔒 Security Verification Required]${NC}"
+        echo -e "  Protected by ${GREEN}${BOLD}Custom Master Password${NC}."
+    else
+        echo -e "  ${YELLOW}${BOLD}[🔒 Security Verification Required]${NC}"
+        echo -e "  Protected by ${YELLOW}${BOLD}Dynamic Daily Master Rule${NC} (Pass@<Day><Date>)."
+    fi
     echo ""
 
     read -rsp "  Enter Master Password: " input_pw </dev/tty || true
     echo ""
 
-    local expected_pw="Pass@$(date +%a)$(date +%-d)"
-    local expected_pw_alt="Pass@$(date +%a)$(date +%d)"
+    local auth_result
+    auth_result=$(python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    ok, mode_or_err = user_auth.verify_master_password('''${input_pw}''')
+    print('OK' if ok else 'FAIL')
+except Exception:
+    print('FAIL')
+" 2>/dev/null || echo "FAIL")
 
-    if [ "$input_pw" != "$expected_pw" ] && [ "$input_pw" != "$expected_pw_alt" ]; then
+    if [ "$auth_result" != "OK" ]; then
         echo -e "\n  ${RED}${BOLD}✖ Access Denied: Incorrect Master Password.${NC}\n"
         sleep 2
         return 1
@@ -1483,11 +1677,16 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
             manage_web_users
         fi
         ;;
+    master-password|set-master-password)
+        if verify_master_password; then
+            configure_master_password
+        fi
+        ;;
     menu|interactive|"")
         interactive_menu
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac

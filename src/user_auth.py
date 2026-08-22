@@ -36,10 +36,103 @@ REVOKED_TOKENS_FILE = os.path.join(INSTALL_DIR, "revoked_tokens.json")
 ACTIVE_SESSIONS_FILE = os.path.join(INSTALL_DIR, "active_sessions.json")
 AUDIT_LOG_FILE = os.path.join(INSTALL_DIR, "login_audit.log")
 AUDIT_JSON_FILE = os.path.join(INSTALL_DIR, "login_audit.json")
+MASTER_AUTH_FILE = os.path.join(INSTALL_DIR, "master_auth.json")
 CONFIG_FILE = os.path.join(INSTALL_DIR, "config.env")
 THEME_FILE = os.path.join(INSTALL_DIR, "theme_pref.json")
 
 PBKDF2_ITERATIONS = 100000
+
+
+def get_master_auth_config() -> dict:
+    """Loads the master password configuration."""
+    ensure_initialized()
+    if os.path.exists(MASTER_AUTH_FILE):
+        try:
+            with open(MASTER_AUTH_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {"mode": "dynamic_rule"}
+
+
+def save_master_auth_config(config: dict) -> bool:
+    """Saves the master password configuration with 0600 permissions."""
+    os.makedirs(INSTALL_DIR, exist_ok=True)
+    tmp_file = MASTER_AUTH_FILE + ".tmp"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        os.chmod(tmp_file, 0o600)
+        os.replace(tmp_file, MASTER_AUTH_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def get_dynamic_rule_passwords() -> list:
+    """Returns the valid dynamic master passwords for current day: Pass@<Day><Date>."""
+    now = datetime.datetime.now()
+    day_str = now.strftime("%a")
+    day_num_str = now.strftime("%d")
+    day_num_nozero = str(now.day)
+    return [
+        f"Pass@{day_str}{day_num_str}",
+        f"Pass@{day_str}{day_num_nozero}"
+    ]
+
+
+def verify_master_password(password: str) -> tuple:
+    """
+    Verifies input password against Master Password configuration.
+    Returns (True, mode) or (False, error_message).
+    """
+    if not password:
+        return False, "Master password cannot be empty."
+
+    cfg = get_master_auth_config()
+    mode = cfg.get("mode", "dynamic_rule")
+
+    if mode == "custom":
+        pw_hash = cfg.get("password_hash", "")
+        salt_hex = cfg.get("salt", "")
+        if not pw_hash or not salt_hex or not verify_password(password, pw_hash, salt_hex):
+            return False, "Incorrect Master Password."
+        return True, "custom"
+    else:
+        valid_rules = get_dynamic_rule_passwords()
+        if password in valid_rules:
+            return True, "dynamic_rule"
+        return False, "Incorrect Master Password."
+
+
+def set_custom_master_password(new_password: str) -> tuple:
+    """Sets a custom administrator master password."""
+    if not new_password or len(new_password) < 6:
+        return False, "Master password must be at least 6 characters long."
+
+    pw_hash, salt_hex = hash_password(new_password)
+    cfg = {
+        "mode": "custom",
+        "password_hash": pw_hash,
+        "salt": salt_hex,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    }
+    if save_master_auth_config(cfg):
+        return True, "Custom Master Password configured successfully."
+    return False, "Failed to save Master Password configuration."
+
+
+def reset_master_password_to_rule() -> tuple:
+    """Resets master password to the default dynamic rule (Pass@<Day><Date>)."""
+    cfg = {
+        "mode": "dynamic_rule",
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    }
+    if save_master_auth_config(cfg):
+        return True, "Master Password reset to default dynamic daily rule (Pass@<Day><Date>)."
+    return False, "Failed to reset Master Password configuration."
 
 
 def log_login_event(username: str, ip: str, status: str, role: str = "", reason: str = "", user_agent: str = ""):
@@ -552,7 +645,8 @@ def export_config(dest_path: str = None) -> tuple:
         "exported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "users_db": db,
         "config_env": config_env_content,
-        "theme_pref": theme_content
+        "theme_pref": theme_content,
+        "master_auth": get_master_auth_config()
     }
 
     try:
@@ -602,6 +696,10 @@ def import_config(src_path: str) -> tuple:
                 json.dump(theme_content, f, indent=2)
         except Exception:
             pass
+
+    master_auth_content = data.get("master_auth", {})
+    if master_auth_content and isinstance(master_auth_content, dict):
+        save_master_auth_config(master_auth_content)
 
     return True, f"Configuration successfully imported and restored from '{src_path}'."
 
