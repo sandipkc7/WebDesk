@@ -378,30 +378,49 @@
                 </div>
             </div>
 
-            <!-- Modifier & Special Key Toggles (Ctrl, Alt, Shift, Win, Esc, Tab, CAD) -->
-            <div class="hub-mod-keys-bar" id="hub_mod_bar">
-                <button class="mod-key-btn" id="mod_ctrl" onclick="window.WebDeskKeyForwarder.toggleModifier('ControlLeft', 0xffe3)" title="Latch / Forward Ctrl Key">Ctrl</button>
-                <button class="mod-key-btn" id="mod_alt" onclick="window.WebDeskKeyForwarder.toggleModifier('AltLeft', 0xffe9)" title="Latch / Forward Alt Key">Alt</button>
-                <button class="mod-key-btn" id="mod_shift" onclick="window.WebDeskKeyForwarder.toggleModifier('ShiftLeft', 0xffe1)" title="Latch / Forward Shift Key">Shift</button>
-                <button class="mod-key-btn" id="mod_super" onclick="window.WebDeskKeyForwarder.toggleModifier('MetaLeft', 0xffeb)" title="Latch / Forward Windows Key">Win</button>
-                <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff1b, 'Escape')" title="Send Escape Key">Esc</button>
-                <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff09, 'Tab')" title="Send Tab Key">Tab</button>
-                <button class="mod-key-btn" onclick="window.WebDeskKeys.sendCtrlAltDel()" title="Send Ctrl+Alt+Del">CAD</button>
+            <!-- Modifier & Linux Fast Shortcuts Section -->
+            <div class="hub-shortcuts-section">
+                <!-- Sticky Modifiers & Special Key Toggles -->
+                <div class="hub-mod-keys-bar" id="hub_mod_bar">
+                    <button class="mod-key-btn" id="mod_ctrl" onclick="window.WebDeskKeyForwarder.toggleModifier('ControlLeft', 0xffe3)" title="Latch / Forward Ctrl Key">Ctrl</button>
+                    <button class="mod-key-btn" id="mod_alt" onclick="window.WebDeskKeyForwarder.toggleModifier('AltLeft', 0xffe9)" title="Latch / Forward Alt Key">Alt</button>
+                    <button class="mod-key-btn" id="mod_shift" onclick="window.WebDeskKeyForwarder.toggleModifier('ShiftLeft', 0xffe1)" title="Latch / Forward Shift Key">Shift</button>
+                    <button class="mod-key-btn" id="mod_super" onclick="window.WebDeskKeyForwarder.toggleModifier('MetaLeft', 0xffeb)" title="Latch / Forward Windows Key">Win</button>
+                    <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff1b, 'Escape')" title="Send Escape Key">Esc</button>
+                    <button class="mod-key-btn" onclick="window.WebDeskKeyForwarder.sendKey(0xff09, 'Tab')" title="Send Tab Key">Tab</button>
+                </div>
+
+                <!-- Linux Dedicated Hotkeys Grid -->
+                <div class="hub-linux-shortcuts-grid">
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('Super_L'); window.WebDeskHub.toggle(false)" title="Open Application / Start Menu (Super Key)">
+                        <span>🪟 Start</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('alt+Tab'); window.WebDeskHub.toggle(false)" title="Switch Active Windows (Alt+Tab)">
+                        <span>🔀 Alt+Tab</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('ctrl+alt+t'); window.WebDeskHub.toggle(false)" title="Launch Linux Terminal (Ctrl+Alt+T)">
+                        <span>💻 Terminal</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('super+d'); window.WebDeskHub.toggle(false)" title="Show / Toggle Desktop (Super+D)">
+                        <span>🖥️ Desktop</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('alt+F2'); window.WebDeskHub.toggle(false)" title="Run Command Dialog (Alt+F2)">
+                        <span>⚡ Run</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('alt+F4'); window.WebDeskHub.toggle(false)" title="Close Active Window (Alt+F4)">
+                        <span>❌ Close</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.send('ctrl+shift+v'); window.WebDeskHub.toggle(false)" title="Terminal Paste (Ctrl+Shift+V)">
+                        <span>📋 Paste</span>
+                    </button>
+                    <button class="shortcut-btn" onclick="window.WebDeskKeys.sendCtrlAltDel(); window.WebDeskHub.toggle(false)" title="Send Ctrl+Alt+Del">
+                        <span>⌨️ CAD</span>
+                    </button>
+                </div>
             </div>
 
+            <!-- Remote Tools & Feature Controls Grid -->
             <div class="hub-actions-grid" id="hub_actions_grid">
-                <button class="hub-btn" id="btn_start" onclick="window.WebDeskKeys.send('Super_L'); window.WebDeskHub.toggle(false)" title="Open Start Menu">
-                    <span class="hub-btn-icon">🪟</span>
-                    <span>Start</span>
-                </button>
-                <button class="hub-btn" id="btn_alttab" onclick="window.WebDeskKeys.send('alt+Tab'); window.WebDeskHub.toggle(false)" title="Switch Windows (Alt+Tab)">
-                    <span class="hub-btn-icon">🔀</span>
-                    <span>Alt+Tab</span>
-                </button>
-                <button class="hub-btn" id="btn_term" onclick="window.WebDeskKeys.send('ctrl+alt+t'); window.WebDeskHub.toggle(false)" title="Open Terminal">
-                    <span class="hub-btn-icon">💻</span>
-                    <span>Terminal</span>
-                </button>
                 <button class="hub-btn" id="btn_files" onclick="window.WebDeskFiles.openModal(); window.WebDeskHub.toggle(false)" title="File Transfers">
                     <span class="hub-btn-icon">📁</span>
                     <span>Files</span>
