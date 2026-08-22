@@ -10,20 +10,23 @@
 2. [Network Ports & Directory Structure](#2-network-ports--directory-structure)
 3. [Prerequisites & Installation](#3-prerequisites--installation)
 4. [Command-Line Interface (CLI) Usage](#4-command-line-interface-cli-usage)
-5. [Interactive Terminal Menu](#5-interactive-terminal-menu)
-6. [Multi-User Web Authentication & Roles (RBAC)](#6-multi-user-web-authentication--roles-rbac)
-7. [Comprehensive Features Guide](#7-comprehensive-features-guide)
-   * [7.1 Performance & Speed/Quality Profiles](#71-performance--speedquality-profiles)
-   * [7.2 Dynamic Screen Resolution Matching](#72-dynamic-screen-resolution-matching)
-   * [7.3 Hardened View-Only / Guest Input Lock](#73-hardened-view-only--guest-input-lock)
-   * [7.4 Low-Latency Remote Audio Streaming](#74-low-latency-remote-audio-streaming)
-   * [7.5 Drag-and-Drop File Transfers](#75-drag-and-drop-file-transfers)
-   * [7.6 Special Key Forwarder & Desktop Shortcuts](#76-special-key-forwarder--desktop-shortcuts)
-   * [7.7 Remote Session & Power Controls](#77-remote-session--power-controls)
-   * [7.8 24/7 System Service & Login Screen Streaming](#78-247-system-service--login-screen-streaming)
-   * [7.9 Native GTK Control Panel (`webdesk_gui.py`)](#79-native-gtk-control-panel-webdesk_guipy)
-8. [Configuration Files & Database](#8-configuration-files--database)
-9. [Troubleshooting & FAQs](#9-troubleshooting--faqs)
+5. [Interactive Terminal Menu & Administration Center](#5-interactive-terminal-menu--administration-center)
+6. [Master Password & Security Modes](#6-master-password--security-modes)
+7. [Multi-User Web Authentication & Roles (RBAC)](#7-multi-user-web-authentication--roles-rbac)
+8. [Session Management & Concurrent Login Protection](#8-session-management--concurrent-login-protection)
+9. [Client IP Logging & Security Audit Trail](#9-client-ip-logging--security-audit-trail)
+10. [Comprehensive Features Guide](#10-comprehensive-features-guide)
+    * [10.1 Performance & Speed/Quality Profiles](#101-performance--speedquality-profiles)
+    * [10.2 Dynamic Screen Resolution Matching](#102-dynamic-screen-resolution-matching)
+    * [10.3 Hardened View-Only / Guest Input Lock](#103-hardened-view-only--guest-input-lock)
+    * [10.4 Low-Latency Remote Audio Streaming](#104-low-latency-remote-audio-streaming)
+    * [10.5 Drag-and-Drop File Transfers](#105-drag-and-drop-file-transfers)
+    * [10.6 Special Key Forwarder & Desktop Shortcuts](#106-special-key-forwarder--desktop-shortcuts)
+    * [10.7 Remote Session & Power Controls](#107-remote-session--power-controls)
+    * [10.8 24/7 System Service & Login Screen Streaming](#108-247-system-service--login-screen-streaming)
+    * [10.9 Native GTK Control Panel (`webdesk_gui.py`)](#109-native-gtk-control-panel-webdesk_guipy)
+11. [Configuration Files & Database](#11-configuration-files--database)
+12. [Troubleshooting & FAQs](#12-troubleshooting--faqs)
 
 ---
 
@@ -41,7 +44,11 @@ WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
 [ x11vnc Engine ] ──► [ X11 Server (DISPLAY=:0) ] ◄── [ Desktop / Login Manager ]
         ▲
         │  (REST API HTTPS on Port 6085)
-[ WebDesk API Server (api_server.py) ] ──► [ Auth DB (users.json) ]
+        ├──────────────────────────────────────────► [ Auth DB (users.json) ]
+        │                                          ► [ Master Auth (master_auth.json) ]
+        │                                          ► [ Active Sessions (active_sessions.json) ]
+        │                                          ► [ Audit Trail (login_audit.log) ]
+[ WebDesk API Server (api_server.py) ]
         ▲
         │  (WebSocket Audio Stream on Port 6086)
 [ WebDesk Audio Server (audio_server.py) ] ◄── [ PulseAudio / PipeWire Monitor ]
@@ -50,7 +57,7 @@ WebDesk unites lightweight Linux desktop technologies into a unified pipeline:
 * **Display Engine**: `x11vnc` attached directly to physical or virtual `DISPLAY=:0`.
 * **Transport Protocol**: Encrypted WebSocket (`wss://`) mediated by `websockify`.
 * **Web Client**: Custom glassmorphic `noVNC` web portal with Floating Action Hub.
-* **Backend API**: Python 3 HTTPS REST API handling multi-user auth, password changes, resolution switching, power commands, and file downloads.
+* **Backend API**: Python 3 HTTPS REST API handling multi-user auth, single-session enforcement, IP audit logging, resolution switching, power commands, and file downloads.
 * **Audio Engine**: PulseAudio/PipeWire monitor source streamed as raw PCM / Web Audio API.
 
 ---
@@ -91,15 +98,19 @@ WebDesk/
 
 ### Installed Runtime Hierarchy (`~/.local/share/webdesk/`)
 
-All persistent runtime assets, binaries, and configurations are deployed to `~/.local/share/webdesk/`:
+All persistent runtime assets, databases, logs, and configurations are deployed to `~/.local/share/webdesk/`:
 
 ```
 ~/.local/share/webdesk/
 ├── api_server.py          # REST API & RBAC Controller
 ├── audio_server.py        # Live PulseAudio/PipeWire WebSocket streamer
-├── user_auth.py           # User authentication module
+├── user_auth.py           # User authentication & security module
 ├── config.env             # Global profile & environment configuration
-├── revoked_tokens.json    # Revocation list for terminated sessions
+├── master_auth.json       # Master password mode & salted PBKDF2 hash (0600)
+├── active_sessions.json   # Single active session registry per user account (0600)
+├── login_audit.log        # Plain-text client IP & login audit log (0600)
+├── login_audit.json       # Structured JSON login audit history (0600)
+├── revoked_tokens.json    # Revocation list for terminated sessions (0600)
 ├── secret.key             # HMAC-SHA256 session token signing key (0600)
 ├── users.json             # Salted PBKDF2 user database & saved preferences (0600)
 ├── webdesk.crt            # TLS/SSL Public Certificate
@@ -108,7 +119,7 @@ All persistent runtime assets, binaries, and configurations are deployed to `~/.
 ├── webdesk.log            # System & runtime service logs
 └── root/                  # Self-contained bundled runtime dependencies
     ├── usr/bin/           # x11vnc, websockify, xdotool, etc.
-    └── usr/share/novnc/   # HTML5 web client (vnc.html, index.html, app/styles/webdesk.css)
+    └── usr/share/novnc/   # HTML5 web client (vnc.html, login.html, styles)
 ```
 
 ---
@@ -121,6 +132,10 @@ Run this single command in your terminal to download and install WebDesk automat
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
 ```
+
+During installation, the installer will prompt you to choose your **Master Security Mode**:
+1. **Set Custom Master Password** (Recommended)
+2. **Use Default Dynamic Daily Rule** (`Pass@<Day><Date>`, e.g. `Pass@Sat22`)
 
 ---
 
@@ -142,9 +157,9 @@ curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -
    ```
 
 3. The installer will:
-   * Verify and deploy bundled binary components to `~/.local/share/webdesk/root/`.
    * Generate 2048-bit self-signed SSL/TLS certificates (`webdesk.pem`).
    * Initialize the salted user database (`users.json`) with default credentials.
+   * Prompt to configure your preferred Master Password mode.
    * Generate cryptographically secure session signing keys (`secret.key`).
 
 ### Complete Uninstallation
@@ -165,77 +180,46 @@ For non-interactive / automated scripts, pass `-y` or `--force`:
 
 ## 4. Command-Line Interface (CLI) Usage
 
-`webdesk.sh` supports direct non-interactive CLI commands for automation, scripting, and system administration:
+`webdesk.sh` (or the shortcut `webdesk`) supports direct non-interactive CLI commands for automation, scripting, and system administration:
 
 ```bash
-./webdesk.sh [COMMAND] [ARGUMENTS]
+webdesk [COMMAND] [ARGUMENTS]
 ```
 
 ### Supported Subcommands
 
 | Subcommand | Arguments | Description |
 | :--- | :--- | :--- |
-| `start` | — | Starts WebDesk server in user-session background mode. |
+| `start` | — | Starts WebDesk server in background mode. |
 | `stop` | — | Stops all running WebDesk background processes. |
-| `restart` | — | Restarts user-session WebDesk processes. |
+| `restart` | — | Restarts WebDesk user-session or systemd service. |
 | `status` | — | Displays live process status, active PID list, and access URLs. |
+| `admin` *(or `administration`)* | — | **Opens the Administration Menu** (Master Password required). |
+| `audit` *(or `audit-logs`)* | — | **Opens the Client Login & IP Address Audit Log Viewer**. |
+| `users` *(or `user-accounts`)* | — | **Opens Web User Management** (Add/Edit/Suspend/Kick/Delete). |
+| `master-password` | — | **Configures Master Password mode** (Custom Password vs. Dynamic Rule). |
 | `logs` *(or `log`)* | — | Streams real-time live server logs (`tail -f webdesk.log`). |
-| `menu` *(or no args)* | — | Launches the interactive TUI management menu. |
+| `menu` *(or no args)* | — | Launches the interactive Main Menu. |
 | `install` | — | Deploys binaries, certificates, and default database. |
-| `remove` *(or `uninstall`)* | `[-y]` | **Completely uninstalls WebDesk** (services, files, database, and configs). |
-| `export` *(or `export-config`)* | `[file.json]` | **Exports unified configuration** (users, passwords, settings, profile, theme). |
+| `remove` *(or `uninstall`)* | `[-y]` | **Completely uninstalls WebDesk** from the host. |
+| `export` *(or `export-config`)* | `[file.json]` | **Exports unified configuration** (users, master auth, settings, theme). |
 | `import` *(or `import-config`)* | `<file.json>` | **Imports unified configuration** into WebDesk. |
-| `reset-users` | — | **Factory resets all user logins** (`admin:admin123`, `user:user123`, `guest:guest123`). |
+| `reset-users` | — | **Factory resets user accounts** (`admin:admin123`, `user:user123`, `guest:guest123`). |
 | `profile` | `[profile_name]` | Sets performance profile: `ultra_fast`, `balanced`, `high_quality`, `low_bandwidth`. |
 | `resolution` | `[WxH]` | Sets remote resolution (e.g. `1920x1080`, `1600x900`, `1280x720`). |
 | `install-service` | — | Configures & installs 24/7 `systemd` background service (`webdesk.service`). |
 | `uninstall-service`| — | Removes the `systemd` background service. |
-| `restart-service` | — | Restarts the 24/7 `systemd` service (`sudo systemctl restart webdesk.service`). |
 | `renew-cert` | — | Regenerates fresh SSL/TLS certificates. |
-| `enable-autostart` | — | Enables automatic startup on desktop user login (`~/.config/autostart`). |
+| `enable-autostart` | — | Enables automatic startup on desktop user login. |
 | `disable-autostart`| — | Disables desktop login autostart. |
 
 ---
 
-### Examples
+## 5. Interactive Terminal Menu & Administration Center
 
-* **Start the server:**
-  ```bash
-  ./webdesk.sh start
-  ```
-
-* **Check status & URLs:**
-  ```bash
-  ./webdesk.sh status
-  ```
-
-* **Reset all web logins to default:**
-  ```bash
-  ./webdesk.sh reset-users
-  ```
-
-* **Change resolution to 1080p:**
-  ```bash
-  ./webdesk.sh resolution 1920x1080
-  ```
-
-* **Set speed profile to Ultra Fast (60 FPS):**
-  ```bash
-  ./webdesk.sh profile ultra_fast
-  ```
-
----
-
-## 5. Interactive Terminal Menu
-
-Running `./webdesk.sh` without arguments launches the terminal UI:
+Running `webdesk` without arguments launches the streamlined Main Menu:
 
 ```
-  __        __   _     ____            _    
-  \ \      / /__| |__ |  _ \  ___  ___| | __
-   \ \ /\ / / _ \ '_ \| | | |/ _ \/ __| |/ /
-    \ V  V /  __/ |_) | |_| |  __/\__ \   < 
-     \_/\_/ \___|_.__/|____/ \___||___/_|\_
   WebDesk Server v2.3.1 - Encrypted In-Browser Remote Desktop
   ==============================================================
   Status     : ● RUNNING (24/7 System Service / Login Screen Active)
@@ -250,77 +234,139 @@ Running `./webdesk.sh` without arguments launches the terminal UI:
   2) 🔄 Restart WebDesk Server
   3) ⚡ Change Speed & Quality Profile
   4) 📐 Change Remote Display Resolution
-  5) 👥 Manage Web User Accounts (Admin/User/Guest) [🔒 Master Password Protected]
+  5) 🛡️  Administration (Master Password Required)
   6) 🖥️  Manage Login Screen Service (24/7)
-  7) 🔒 Renew TLS/SSL Certificate
-  8) 🖥️  Launch Native GUI Control Panel
-  9) 📜 View Live Service Logs
- 10) 🗑️  Completely Uninstall WebDesk
+  7) 🖥️  Launch Native GUI Control Panel
+  8) 📜 View Live Service Logs
   0) 🚪 Exit
+```
+
+### 🛡️ Administration & Security Submenu (Option 5)
+
+All sensitive administrative actions are consolidated behind Master Password verification:
+
+```
+  WebDesk Administration & Security Center (Master Protected)
+  ==============================================================
+
+  1) 👥 Web User Accounts & Access Control
+  2) 📜 Client Login & IP Address Audit Logs
+  3) 🔑 Master Password Settings (Custom Password / Dynamic Rule)
+  4) 🔄 Reset All Web Users to Factory Defaults
+  5) 🔒 Renew / Reissue TLS/SSL Certificate
+  6) 📤 Export Configuration & User Accounts (.json)
+  7) 📥 Import Configuration & User Accounts (.json)
+  8) 🗑️  Completely Uninstall WebDesk
+  0) ↩  Back to Main Menu
 ```
 
 ---
 
-## 6. Multi-User Web Authentication & Roles (RBAC)
+## 6. Master Password & Security Modes
 
-WebDesk features a role-based authentication portal (`login.html`) that allows multiple users to connect to the single shared console session with granular access levels:
+WebDesk supports two Master Security modes:
 
-### 6.1 🔒 Dynamic Master Password Security
+### Mode 1: Custom Master Password
+- Administrators can set a persistent, custom master password ($\ge 6$ characters).
+- Stored securely in `~/.local/share/webdesk/master_auth.json` with PBKDF2-HMAC-SHA256 salted hashing (100,000 iterations) and `0600` permissions.
 
-All user management actions, account modifications, password changes, factory resets, and configuration imports/exports in both the **CLI (`webdesk.sh`)** and **GUI (`webdesk_gui.py`)** are protected by dynamic **Master Password Authentication**.
-
-* **Dynamic Password Formula**:
+### Mode 2: Dynamic Daily Rule (Default)
+- Changes dynamically each day according to the host calendar date:
   $$\text{Pass@} + \text{3-letter Day of Week} + \text{Day of Month}$$
+  *Example:* Saturday, August 22nd $\rightarrow$ **`Pass@Sat22`**
 
-* **Live System Date Display**:
-  When prompted, the authentication window displays the current host date in format: `%-d %b, %Y %A` (e.g. `22 Aug, 2026 Tuesday`).
+### Switching Modes
+Access **Administration** $\rightarrow$ **Option 3 (`🔑 Master Password Settings`)** or run `webdesk master-password`:
+```text
+--- Master Password Configuration ---
 
-#### Dynamic Password Reference Table:
+Current Mode : Custom Master Password (or Dynamic Daily Rule)
+==============================================================
 
-| System Date Displayed | Dynamic Master Password |
-| :--- | :--- |
-| **`22 Aug, 2026 Tuesday`** | **`Pass@Tue22`** |
-| **`22 Aug, 2026 Saturday`** | **`Pass@Sat22`** |
-| **`5 Sep, 2026 Wednesday`** | **`Pass@Wed5`** *(or `Pass@Wed05`)* |
-| **`15 Oct, 2026 Thursday`** | **`Pass@Thu15`** |
-| **`1 Jan, 2027 Friday`** | **`Pass@Fri1`** *(or `Pass@Fri01`)* |
-
-* **Protected Operations**:
-  * Terminal Menu Option `5) 👥 Manage Web User Accounts`
-  * CLI Commands: `./webdesk.sh reset-users`, `./webdesk.sh export`, `./webdesk.sh import`
-  * GTK Control Panel: `👥 Web Accounts` management dialog, `📤 Export Config`, `📥 Import Config`, and `🔄 Reset Defaults`
+  1) ✍️   Set Custom Master Password
+  2) 🔄  Revert to Default Dynamic Rule (Pass@<Day><Date>)
+  3) ℹ️   View Dynamic Daily Rule Details
+  0) ↩   Back to Administration Menu
+```
 
 ---
 
-### 6.2 Default Credentials
+## 7. Multi-User Web Authentication & Roles (RBAC)
+
+WebDesk features a web login portal (`login.html`) with role-based access control (RBAC):
+
+### 7.1 Default Credentials
 
 | Username | Password | Role | Permissions & Capabilities |
 | :--- | :--- | :--- | :--- |
-| **`admin`** | **`admin123`** | `admin` | **Full Control**: Mouse & keyboard interaction, resolution changes, file upload/download, change all passwords, add/suspend/delete users, reboot/poweroff system. |
-| **`user`** | **`user123`** | `user` | **Interactive User**: Full desktop interaction, audio, file upload/download, can change **own** password. Destructive power actions and account management hidden. |
-| **`guest`** | **`guest123`** | `viewer` | **View-Only Stream**: Real-time screen and audio streaming. **100% Input Locked** (all mouse clicks, movement, and keystrokes are intercepted and dropped). File transfer & power actions disabled. |
+| **`admin`** | **`admin123`** | `admin` | **Full Control**: Mouse & keyboard interaction, resolution changes, file upload/download, change all passwords, add/suspend/delete users, view connected viewers & audit logs, reboot/poweroff system. |
+| **`user`** | **`user123`** | `user` | **Interactive User**: Full desktop interaction, audio, file upload/download, can change **own** password. Power actions and account management hidden. |
+| **`guest`** | **`guest123`** | `viewer` | **View-Only Stream**: Real-time screen and audio streaming. **100% Input Locked** (all mouse clicks, movement, and keystrokes are intercepted and dropped). File transfers and power actions disabled. |
 
----
+### 7.2 Managing User Accounts
 
-### 6.3 Managing User Accounts
-
-Access user management via `./webdesk.sh` -> Option `5`:
+Access user management via `webdesk users` or **Administration** $\rightarrow$ **Option 1**:
 
 * **`1) 📋 List All Web Users`**: Displays usernames, roles, saved display profiles, active status, and creation timestamps.
 * **`2) ➕ Add New Web User`**: Prompts for username, password, and role (`admin`, `user`, `viewer`).
 * **`3) 🔑 Change User Password`**: Updates password for any account.
 * **`4) ⏸️  Suspend / Unsuspend User`**: Instantly blocks account from signing in and revokes active tokens.
 * **`5) ⚡ Terminate Active Session`**: Kicks a connected user immediately.
-* **`6) 🗑️  Delete Web User`**: Permanently removes user account from database.
-* **`7) 🔄 Reset All Users to Factory Defaults`**: Restores `admin`, `user`, and `guest` to default state.
-* **`8) 📤 Export Full Configuration`**: Exports all users, passwords, display settings, and server profile to a single `.json` backup.
-* **`9) 📥 Import Full Configuration`**: Restores all users, settings, and server configurations from a `.json` backup.
+---
+
+## 8. Session Management & Concurrent Login Protection
+
+To prevent conflicting control and unauthorized concurrent access, WebDesk enforces **Single Active Session per User Account**:
+
+1. **New Session Invalidation**:
+   - When a user logs in from **Browser B**, a new cryptographic session nonce is registered in `active_sessions.json`.
+   - Any prior session tokens for that username on **Browser A** are superseded.
+
+2. **Real-Time Heartbeat Enforcement**:
+   - The web client sends periodic heartbeats to `/api/auth/heartbeat`.
+   - On detecting a superseded session, **Browser A** immediately severs the RFB desktop stream and wipes local credentials.
+
+3. **In-Page Blurred Disconnect Overlay**:
+   - Rather than abruptly redirecting, **Browser A** presents a dark frosted glass overlay (`backdrop-filter: blur(18px)`) over the desktop canvas:
+     > ⚠️ **Session Disconnected**  
+     > *New session started in another browser.*
+   - Clicking **"Go to Login Screen ➔"** takes the user to `login.html` where an alert banner explains the logout reason.
 
 ---
 
-## 7. Comprehensive Features Guide
+## 9. Client IP Logging & Security Audit Trail
 
-### 7.1 Performance & Speed/Quality Profiles
+WebDesk logs client IP addresses for all connection attempts:
+
+* **Header Forwarding**: The internal WebSocket proxy forwards `X-Forwarded-For` and `X-Real-IP` headers to the API daemon.
+* **Audit Storage**:
+  - `~/.local/share/webdesk/login_audit.log`: Plain-text timestamped log.
+  - `~/.local/share/webdesk/login_audit.json`: Structured JSON containing the last 500 login events (timestamp, username, role, client IP, status `SUCCESS`/`FAILED`, reason, user-agent).
+
+### Viewing Audit Logs
+Run `webdesk audit` or select **Option 2** under the **Administration Menu**:
+
+```text
+--- Client Login & Connected IP Audit Logs ---
+
+TIMESTAMP               STATUS     USERNAME        ROLE       IP ADDRESS          DETAILS
+----------------------------------------------------------------------------------------------------------
+2026-08-22 11:07:21     SUCCESS    guest           viewer     192.168.1.100       
+2026-08-22 11:05:40     FAILED     admin           -          192.168.1.45        Incorrect password
+2026-08-22 10:48:12     SUCCESS    admin           admin      127.0.0.1           
+
+==========================================================================================================
+1) 🔄 Refresh Logs
+2) 📜 Live Stream Login Logs (tail -f)
+3) 🗑️  Clear Login Audit Logs
+0) ↩  Back to Administration Menu
+```
+
+---
+
+## 10. Comprehensive Features Guide
+
+### 10.1 Performance & Speed/Quality Profiles
 
 WebDesk provides fine-tuned compression and frame rate profiles for various network conditions:
 
@@ -333,7 +379,7 @@ WebDesk provides fine-tuned compression and frame rate profiles for various netw
 
 > **User Preference Preservation**: When a user selects a profile in the Floating Hub (`⚙️ Display`) and clicks **💾 Save & Apply Preferences**, their settings are saved to `users.json` and automatically loaded whenever they log in from any browser.
 
-### 7.2 Dynamic Screen Resolution Matching & Match Res
+### 10.2 Dynamic Screen Resolution Matching & Match Res
 
 * **One-Click `🎯 Match Res`**: Clicking **Match Res** on the floating menu dynamically calculates the browser window's inner canvas dimensions and Device Pixel Ratio ($DPR$), immediately sending a request to the WebDesk API (`/set-resolution`) to resize the host X11 display.
 * **Auto-Match on Login (`auto`)**: When a user logs in with resolution set to `auto`, WebDesk measures the client viewport and configures the host desktop to match the client window without letterboxing or black bars.
@@ -343,7 +389,7 @@ WebDesk provides fine-tuned compression and frame rate profiles for various netw
 
 ---
 
-### 7.3 Hardened View-Only / Guest Input Lock
+### 10.3 Hardened View-Only / Guest Input Lock
 
 To guarantee security when sharing desktop streams with untrusted or guest viewers, WebDesk enforces a **3-Layer Input Lock**:
 
@@ -356,7 +402,7 @@ To guarantee security when sharing desktop streams with untrusted or guest viewe
 
 ---
 
-### 7.4 Low-Latency Remote Audio Streaming
+### 10.4 Low-Latency Remote Audio Streaming
 
 * **Source**: Captures audio from the default PulseAudio/PipeWire monitor source (`.monitor`).
 * **Transport**: Streams over dedicated WebSocket on port `6086`.
@@ -365,7 +411,7 @@ To guarantee security when sharing desktop streams with untrusted or guest viewe
 
 ---
 
-### 7.5 Drag-and-Drop File Transfers
+### 10.5 Drag-and-Drop File Transfers
 
 * **Uploads**: Drag and drop any file directly onto the browser window. Files are securely transferred via `POST /api/upload` and saved directly into `~/Downloads/`.
 * **Downloads**: Click **📁 Files** in the Floating Hub to browse files in `~/Downloads/` and download them back to the client computer with one click.
@@ -373,7 +419,7 @@ To guarantee security when sharing desktop streams with untrusted or guest viewe
 
 ---
 
-### 7.6 Special Key Forwarder & Desktop Shortcuts
+### 10.6 Special Key Forwarder & Desktop Shortcuts
 
 The Floating Action Hub provides one-touch buttons and key latching to send desktop combos without triggering client browser shortcuts:
 
@@ -382,7 +428,7 @@ The Floating Action Hub provides one-touch buttons and key latching to send desk
 
 ---
 
-### 7.7 Remote Session & Power Controls
+### 10.7 Remote Session & Power Controls
 
 Admins can perform system-level actions directly from the **🔒 Power** menu:
 * **🔒 Lock Screen**: Locks the active desktop session.
@@ -394,7 +440,7 @@ Admins can perform system-level actions directly from the **🔒 Power** menu:
 
 ---
 
-### 7.8 24/7 System Service & Login Screen Streaming
+### 10.8 24/7 System Service & Login Screen Streaming
 
 WebDesk can run as a persistent `systemd` service (`webdesk.service`):
 * **LightDM / Display Manager Streaming**: Allows logging into Linux from a cold boot via browser before any user logs in physically.
@@ -404,7 +450,7 @@ WebDesk can run as a persistent `systemd` service (`webdesk.service`):
 
 ---
 
-### 7.9 Native GTK Control Panel (`webdesk_gui.py`)
+### 10.9 Native GTK Control Panel (`webdesk_gui.py`)
 
 A modern desktop GUI application is included for graphical control:
 * Run with: `python3 webdesk_gui.py` or Menu Option `8`.
@@ -412,7 +458,7 @@ A modern desktop GUI application is included for graphical control:
 
 ---
 
-## 8. Configuration Files & Database
+## 11. Configuration Files & Database
 
 ### `users.json` (User Store)
 Located at `~/.local/share/webdesk/users.json` (Permissions `0600`):
@@ -447,29 +493,24 @@ PROFILE=balanced
 
 ### 📦 Unified Configuration Export & Import (.json)
 
-WebDesk allows merging and bundling the entire configuration (user accounts, password hashes, salts, roles, display/speed preferences, server profiles, and theme preferences) into a single portable `.json` file for backup, replication, or migration:
+WebDesk allows merging and bundling the entire configuration (user accounts, password hashes, salts, roles, display/speed preferences, master security mode, server profiles, and theme preferences) into a single portable `.json` file for backup, replication, or migration:
 
 * **Exporting Configuration**:
   ```bash
-  # Export to default ~/webdesk_config_backup.json
-  ./webdesk.sh export
-
-  # Export to specific file path
-  ./webdesk.sh export /path/to/my_webdesk_backup.json
+  webdesk export [destination_file.json]
   ```
 
 * **Importing Configuration**:
   ```bash
-  # Import and restore from backup file
-  ./webdesk.sh import /path/to/my_webdesk_backup.json
+  webdesk import <source_backup.json>
   ```
 
 * **GUI Import & Export**:
-  Open [`webdesk_gui.py`](file:///home/sandeep/webdesk_gui.py), click **`👥 Web Accounts`**, and use the **`📤 Export Config`** or **`📥 Import Config`** buttons.
+  Open `webdesk_gui.py`, click **`👥 Web Accounts`**, and use the **`📤 Export Config`** or **`📥 Import Config`** buttons.
 
 ---
 
-## 9. Troubleshooting & FAQs
+## 12. Troubleshooting & FAQs
 
 ### Q1: Browser displays "Your connection isn't private" or certificate warning
 > **Explanation**: WebDesk uses self-signed SSL/TLS certificates to encrypt the stream.
@@ -481,7 +522,7 @@ WebDesk allows merging and bundling the entire configuration (user accounts, pas
 ### Q3: Forgotten admin password
 > **Fix**: Open terminal on the host and run:
 > ```bash
-> ./webdesk.sh reset-users
+> webdesk reset-users
 > ```
 > This immediately restores `admin` (`admin123`), `user` (`user123`), and `guest` (`guest123`).
 
@@ -491,7 +532,7 @@ WebDesk allows merging and bundling the entire configuration (user accounts, pas
 ### Q5: How to check live logs for debugging
 > **Fix**: Run:
 > ```bash
-> ./webdesk.sh logs
+> webdesk logs
 > ```
 > or inspect the log file directly:
 > ```bash
