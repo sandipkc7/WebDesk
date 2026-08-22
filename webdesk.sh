@@ -721,22 +721,19 @@ status_webdesk() {
 manage_web_users() {
     set +e
     ensure_runtime_files
-    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${PYTHONPATH}"
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}/src:${SCRIPT_DIR}:${PYTHONPATH}"
 
     while true; do
         clear
-        echo -e "${BOLD}${CYAN}--- WebDesk Multi-User Web Accounts Manager ---${NC}\n"
+        echo -e "${BOLD}${CYAN}--- WebDesk Web User Accounts & Access Control ---${NC}\n"
         echo -e "  ${BOLD}1)${NC} 📋 List All Web Users, Roles & Status"
         echo -e "  ${BOLD}2)${NC} ➕ Add New Web User (Admin / User / Guest)"
         echo -e "  ${BOLD}3)${NC} 🔑 Change User Password"
         echo -e "  ${BOLD}4)${NC} ⏸️  Suspend / Unsuspend User Account"
         echo -e "  ${BOLD}5)${NC} ⚡ Terminate Active User Session (Kick)"
         echo -e "  ${BOLD}6)${NC} 🗑️  Delete Web User"
-        echo -e "  ${BOLD}7)${NC} 🔄 Reset All Users & Logins to Factory Defaults"
-        echo -e "  ${BOLD}8)${NC} 📤 Export Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}9)${NC} 📥 Import Configuration & User Accounts (.json)"
-        echo -e "  ${BOLD}0)${NC} ↩  Back to Main Menu\n"
-        read -rp "Select option [0-9]: " u_choice </dev/tty || break
+        echo -e "  ${BOLD}0)${NC} ↩  Back to Administration Menu\n"
+        read -rp "Select option [0-6]: " u_choice </dev/tty || break
 
         case "$u_choice" in
             1)
@@ -746,6 +743,7 @@ manage_web_users() {
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -776,6 +774,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -794,6 +793,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -812,6 +812,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -831,6 +832,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -847,6 +849,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -857,7 +860,132 @@ except Exception as e:
 " 2>&1 || true
                 pause_prompt "Press Enter to return to user menu..."
                 ;;
-            7)
+            0|*)
+                break
+                ;;
+        esac
+    done
+}
+
+view_login_audit_logs() {
+    set +e
+    ensure_runtime_files
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}/src:${SCRIPT_DIR}:${PYTHONPATH}"
+
+    while true; do
+        clear
+        echo -e "${BOLD}${CYAN}--- Client Login & Connected IP Audit Logs ---${NC}\n"
+        echo -e "  ${BOLD}TIMESTAMP               STATUS     USERNAME        ROLE       IP ADDRESS          DETAILS${NC}"
+        echo -e "  ----------------------------------------------------------------------------------------------------------"
+        python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    logs = user_auth.get_login_audit_logs(limit=40)
+    if not logs:
+        print('  \033[2mNo login records found yet.\033[0m')
+    for item in reversed(logs):
+        status = item.get('status', 'SUCCESS')
+        st_color = '\033[1;32m' if status == 'SUCCESS' else '\033[1;31m'
+        u_role = item.get('role', '-')
+        role_color = '\033[1;36m' if u_role == 'admin' else ('\033[1;32m' if u_role == 'user' else '\033[1;33m')
+        ts = item.get('timestamp', '')
+        uname = item.get('username', '')
+        ip = item.get('ip', '127.0.0.1')
+        reason = item.get('reason', '')
+        print(f\"  {ts:<23} {st_color}{status:<10}\033[0m {uname:<15} {role_color}{u_role:<10}\033[0m \033[1;37m{ip:<19}\033[0m {reason}\")
+except Exception as e:
+    print(f'  Error loading audit logs: {e}')
+" 2>&1 || true
+
+        echo -e "\n  =========================================================================================================="
+        echo -e "  ${BOLD}1)${NC} 🔄 Refresh Logs"
+        echo -e "  ${BOLD}2)${NC} 📜 Live Stream Login Logs (tail -f)"
+        echo -e "  ${BOLD}3)${NC} 🗑️  Clear Login Audit Logs"
+        echo -e "  ${BOLD}0)${NC} ↩  Back to Administration Menu\n"
+        read -rp "Select option [0-3]: " log_choice </dev/tty || break
+
+        case "$log_choice" in
+            1)
+                continue
+                ;;
+            2)
+                clear
+                echo -e "${BOLD}${CYAN}--- Live Stream Login Audit Logs ---${NC}"
+                echo -e "${YELLOW}Press Ctrl+C to stop stream...${NC}\n"
+                local audit_file="${INSTALL_DIR}/login_audit.log"
+                touch "${audit_file}"
+                tail -n 40 -f "${audit_file}" || true
+                pause_prompt "Press Enter to return to audit log menu..."
+                ;;
+            3)
+                read -rp "Are you sure you want to clear all login audit logs? (y/N): " c_confirm </dev/tty || true
+                if [[ "$c_confirm" =~ ^[yY]$ ]]; then
+                    python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+sys.path.insert(0, '${SCRIPT_DIR}')
+try:
+    import user_auth
+    user_auth.clear_login_audit_logs()
+    print('\033[1;32m✔ Login audit logs cleared successfully.\033[0m')
+except Exception as e:
+    print(f'\033[1;31m✖ Error: {e}\033[0m')
+" 2>&1 || true
+                fi
+                pause_prompt "Press Enter to return to audit log menu..."
+                ;;
+            0|*)
+                break
+                ;;
+        esac
+    done
+}
+
+administration_menu() {
+    set +e
+    ensure_runtime_files
+    if ! verify_master_password; then
+        pause_prompt
+        return
+    fi
+
+    while true; do
+        clear
+        echo -e "${CYAN}${BOLD}"
+        cat << "ADMIN_BANNER"
+    _       _           _       _     _             _   _             
+   / \   __| |_ __ ___ (_)_ __ (_)___| |_ _ __ __ _| |_(_) ___  _ __  
+  / _ \ / _` | '_ ` _ \| | '_ \| / __| __| '__/ _` | __| |/ _ \| '_ \ 
+ / ___ \ (_| | | | | | | | | | | \__ \ |_| | | (_| | |_| | (_) | | | |
+/_/   \_\__,_|_| |_| |_|_|_| |_|_|___/\__|_|  \__,_|\__|_|\___/|_| |_|
+ADMIN_BANNER
+        echo -e "${NC}"
+        echo -e "  ${BOLD}WebDesk Administration & Security Center${NC} ${DIM}(Master Protected)${NC}"
+        echo -e "  ==============================================================\n"
+        echo -e "  ${BOLD}1)${NC} 👥 Web User Accounts & Access Control"
+        echo -e "  ${BOLD}2)${NC} 📜 Client Login & IP Address Audit Logs"
+        echo -e "  ${BOLD}3)${NC} 🔄 Reset All Web Users to Factory Defaults"
+        echo -e "  ${BOLD}4)${NC} 🔒 Renew / Reissue TLS/SSL Certificate"
+        echo -e "  ${BOLD}5)${NC} 📤 Export Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}6)${NC} 📥 Import Configuration & User Accounts (.json)"
+        echo -e "  ${BOLD}7)${NC} 🗑️  Completely Uninstall WebDesk"
+        echo -e "  ${BOLD}0)${NC} ↩  Back to Main Menu\n"
+
+        read -rp "Select an option [0-7]: " adm_choice </dev/tty || break
+
+        case "$adm_choice" in
+            1)
+                manage_web_users
+                ;;
+            2)
+                view_login_audit_logs
+                ;;
+            3)
                 echo -e "\n${YELLOW}${BOLD}[Reset All Web Users to Factory Defaults]${NC}"
                 echo -e "${RED}This will reset the user database to standard default accounts:${NC}"
                 echo -e "  • ${BOLD}admin${NC} -> password: ${BOLD}admin123${NC} (Role: Admin)"
@@ -871,6 +999,7 @@ except Exception as e:
                     python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -882,9 +1011,13 @@ except Exception as e:
                 else
                     echo -e "\n${CYAN}Reset cancelled.${NC}"
                 fi
-                pause_prompt "Press Enter to return to user menu..."
+                pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            8)
+            4)
+                renew_cert
+                pause_prompt "Press Enter to return to administration menu..."
+                ;;
+            5)
                 echo -e "\n${BLUE}${BOLD}[Export Full WebDesk Configuration]${NC}"
                 default_exp="${USER_HOME}/webdesk_config_backup.json"
                 read -rp "Enter destination path [default: ${default_exp}]: " exp_dest </dev/tty || true
@@ -892,6 +1025,7 @@ except Exception as e:
                 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -900,15 +1034,16 @@ try:
 except Exception as e:
     print(f'\\n\033[1;31m✖ Error: {e}\033[0m')
 " 2>&1 || true
-                pause_prompt "Press Enter to return to user menu..."
+                pause_prompt "Press Enter to return to administration menu..."
                 ;;
-            9)
+            6)
                 echo -e "\n${YELLOW}${BOLD}[Import Full WebDesk Configuration]${NC}"
                 read -rp "Enter path to configuration JSON file: " imp_src </dev/tty || true
                 if [ -n "$imp_src" ]; then
                     python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}')
+sys.path.insert(0, '${SCRIPT_DIR}/src')
 sys.path.insert(0, '${SCRIPT_DIR}')
 try:
     import user_auth
@@ -920,7 +1055,11 @@ except Exception as e:
                 else
                     echo -e "\n${CYAN}Import cancelled.${NC}"
                 fi
-                pause_prompt "Press Enter to return to user menu..."
+                pause_prompt "Press Enter to return to administration menu..."
+                ;;
+            7)
+                remove_webdesk
+                pause_prompt "Press Enter to return to administration menu..."
                 ;;
             0|*)
                 break
@@ -982,7 +1121,7 @@ AUTH_BANNER
     cur_date=$(date +"%-d %b, %Y %A")
     echo -e "  ${DIM}System Date:${NC} ${CYAN}${BOLD}${cur_date}${NC}\n"
     echo -e "  ${YELLOW}${BOLD}[🔒 Security Verification Required]${NC}"
-    echo -e "  Menu Option 5 (Web User Accounts) is protected by Master Security."
+    echo -e "  Administration options are protected by Master Security."
     echo ""
 
     read -rsp "  Enter Master Password: " input_pw </dev/tty || true
@@ -998,7 +1137,7 @@ AUTH_BANNER
     fi
 
     echo -e "\n  ${GREEN}${BOLD}✔ Master Password Verified. Access Granted.${NC}\n"
-    sleep 1
+    sleep 0.8
     return 0
 }
 
@@ -1063,15 +1202,13 @@ interactive_menu() {
 
         echo -e "  ${BOLD}3)${NC} ⚡ Change Speed & Quality Profile"
         echo -e "  ${BOLD}4)${NC} 📐 Change Remote Display Resolution"
-        echo -e "  ${BOLD}5)${NC} 👥 Manage Web User Accounts (Admin/User/Guest)"
+        echo -e "  ${BOLD}5)${NC} 🛡️  Administration (Master Password Required)"
         echo -e "  ${BOLD}6)${NC} 🖥️  Manage Login Screen Service (24/7)"
-        echo -e "  ${BOLD}7)${NC} 🔒 Renew TLS/SSL Certificate"
-        echo -e "  ${BOLD}8)${NC} 🖥️  Launch Native GUI Control Panel"
-        echo -e "  ${BOLD}9)${NC} 📜 View Live Service Logs"
-        echo -e "  ${BOLD}10)${NC} 🗑️  Completely Uninstall WebDesk"
+        echo -e "  ${BOLD}7)${NC} 🖥️  Launch Native GUI Control Panel"
+        echo -e "  ${BOLD}8)${NC} 📜 View Live Service Logs"
         echo -e "  ${BOLD}0)${NC} 🚪 Exit\n"
 
-        if ! read -rp "Select an option [0-10]: " choice </dev/tty; then
+        if ! read -rp "Select an option [0-8]: " choice </dev/tty; then
             echo ""
             break
         fi
@@ -1097,7 +1234,7 @@ interactive_menu() {
                     if is_running; then
                         echo -e "${GREEN}✔ WebDesk system service restarted successfully.${NC}"
                     else
-                        echo -e "${RED}[!] Failed to restart service. Check logs in Option 9.${NC}"
+                        echo -e "${RED}[!] Failed to restart service. Check logs in Option 8.${NC}"
                     fi
                 else
                     echo -e "${YELLOW}Restarting WebDesk user session...${NC}"
@@ -1151,11 +1288,7 @@ interactive_menu() {
                 pause_prompt
                 ;;
             5)
-                if ! verify_master_password; then
-                    pause_prompt
-                    continue
-                fi
-                manage_web_users
+                administration_menu
                 ;;
             6)
                 clear
@@ -1193,10 +1326,6 @@ interactive_menu() {
                 pause_prompt
                 ;;
             7)
-                renew_cert
-                pause_prompt
-                ;;
-            8)
                 if [ -f "${SCRIPT_DIR}/webdesk_gui.py" ]; then
                     python3 "${SCRIPT_DIR}/webdesk_gui.py" &
                 elif [ -f "${INSTALL_DIR}/webdesk_gui.py" ]; then
@@ -1204,7 +1333,7 @@ interactive_menu() {
                 fi
                 pause_prompt
                 ;;
-            9)
+            8)
                 clear
                 echo -e "${BOLD}${CYAN}--- WebDesk Live Debug Logs (${LOG_FILE}) ---${NC}"
                 echo -e "${YELLOW}Press Ctrl+C to stop viewing logs...${NC}\n"
@@ -1213,10 +1342,6 @@ interactive_menu() {
                 else
                     journalctl -u webdesk.service -n 50 -f || true
                 fi
-                pause_prompt
-                ;;
-            10)
-                remove_webdesk
                 pause_prompt
                 ;;
             0|q|Q|exit)
@@ -1345,11 +1470,24 @@ ok, msg = user_auth.import_config('${2}')
 print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
 "
         ;;
+    admin|administration)
+        administration_menu
+        ;;
+    audit-logs|audit|login-logs)
+        if verify_master_password; then
+            view_login_audit_logs
+        fi
+        ;;
+    users|user-accounts)
+        if verify_master_password; then
+            manage_web_users
+        fi
+        ;;
     menu|interactive|"")
         interactive_menu
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac

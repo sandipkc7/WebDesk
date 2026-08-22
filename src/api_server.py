@@ -94,6 +94,17 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(response_bytes)
 
+    def get_client_ip(self):
+        xff = self.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        xri = self.headers.get("X-Real-IP", "")
+        if xri:
+            return xri.strip()
+        if self.client_address:
+            return str(self.client_address[0])
+        return "127.0.0.1"
+
     def get_token_user(self):
         auth_header = self.headers.get("Authorization", "")
         token = ""
@@ -137,6 +148,16 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 "version": "2.3.1",
                 "api_port": PORT
             })
+            return
+
+        # View login audit logs
+        if path in ["/api/auth/audit-logs", "/api/audit-logs"]:
+            user, err = self.get_token_user()
+            if not user or user.get("role") != "admin":
+                self.send_json(403, {"ok": False, "success": False, "error": "Unauthorized. Admin required."})
+                return
+            logs = user_auth.get_login_audit_logs(limit=100)
+            self.send_json(200, {"ok": True, "success": True, "logs": logs})
             return
 
         # Current logged in user info
@@ -266,11 +287,17 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             data = self.read_json_body()
             username = data.get("username", "")
             password = data.get("password", "")
+            client_ip = self.get_client_ip()
+            user_agent = self.headers.get("User-Agent", "")
+
             ok, user_or_err = user_auth.authenticate(username, password)
             if not ok:
+                user_auth.log_login_event(username, client_ip, status="FAILED", reason=str(user_or_err), user_agent=user_agent)
                 self.send_json(401, {"ok": False, "success": False, "error": user_or_err})
                 return
+
             token = user_auth.create_token(username)
+            user_auth.log_login_event(username, client_ip, status="SUCCESS", role=user_or_err.get("role", "user"), user_agent=user_agent)
             ACTIVE_VIEWERS[username] = (time.time(), user_or_err.get("role", "user"))
             self.send_json(200, {
                 "ok": True,

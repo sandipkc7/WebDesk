@@ -34,10 +34,81 @@ USERS_FILE = os.path.join(INSTALL_DIR, "users.json")
 SECRET_KEY_FILE = os.path.join(INSTALL_DIR, "secret.key")
 REVOKED_TOKENS_FILE = os.path.join(INSTALL_DIR, "revoked_tokens.json")
 ACTIVE_SESSIONS_FILE = os.path.join(INSTALL_DIR, "active_sessions.json")
+AUDIT_LOG_FILE = os.path.join(INSTALL_DIR, "login_audit.log")
+AUDIT_JSON_FILE = os.path.join(INSTALL_DIR, "login_audit.json")
 CONFIG_FILE = os.path.join(INSTALL_DIR, "config.env")
 THEME_FILE = os.path.join(INSTALL_DIR, "theme_pref.json")
 
 PBKDF2_ITERATIONS = 100000
+
+
+def log_login_event(username: str, ip: str, status: str, role: str = "", reason: str = "", user_agent: str = ""):
+    """Logs a client login attempt with IP address, timestamp, status, and role."""
+    ensure_initialized()
+    now_utc = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    log_line = f"[{now_local}] [{status}] User: {username or 'unknown'} ({role or '-'}) | IP: {ip or '127.0.0.1'} | {reason or ''}\n"
+    try:
+        with open(AUDIT_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(log_line)
+        os.chmod(AUDIT_LOG_FILE, 0o600)
+    except Exception:
+        pass
+
+    try:
+        events = []
+        if os.path.exists(AUDIT_JSON_FILE):
+            with open(AUDIT_JSON_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    events = data
+        events.append({
+            "timestamp": now_local,
+            "timestamp_utc": now_utc,
+            "username": username or "unknown",
+            "role": role or "-",
+            "ip": ip or "127.0.0.1",
+            "status": status,
+            "reason": reason or "",
+            "user_agent": user_agent or ""
+        })
+        if len(events) > 500:
+            events = events[-500:]
+        with open(AUDIT_JSON_FILE, "w", encoding="utf-8") as f:
+            json.dump(events, f, indent=2)
+        os.chmod(AUDIT_JSON_FILE, 0o600)
+    except Exception:
+        pass
+
+
+def get_login_audit_logs(limit: int = 50) -> list:
+    """Retrieves the most recent login audit events."""
+    ensure_initialized()
+    if os.path.exists(AUDIT_JSON_FILE):
+        try:
+            with open(AUDIT_JSON_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data[-limit:]
+        except Exception:
+            pass
+    return []
+
+
+def clear_login_audit_logs() -> bool:
+    """Clears the login audit history."""
+    ensure_initialized()
+    try:
+        if os.path.exists(AUDIT_LOG_FILE):
+            with open(AUDIT_LOG_FILE, "w", encoding="utf-8") as f:
+                f.write("")
+        if os.path.exists(AUDIT_JSON_FILE):
+            with open(AUDIT_JSON_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
+        return True
+    except Exception:
+        return False
 
 
 def load_active_sessions() -> dict:
