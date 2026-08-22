@@ -630,9 +630,16 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
 
             display = os.environ.get("DISPLAY", ":0")
             env = dict(os.environ, DISPLAY=display)
-            ld_path = os.path.join(INSTALL_DIR, "root", "usr", "lib", "x86_64-linux-gnu")
-            if os.path.exists(ld_path):
-                env["LD_LIBRARY_PATH"] = f"{ld_path}:{env.get('LD_LIBRARY_PATH', '')}"
+            lib_root = os.path.join(INSTALL_DIR, "root", "usr", "lib")
+            multiarch_paths = [lib_root]
+            if os.path.isdir(lib_root):
+                for entry in os.listdir(lib_root):
+                    sub = os.path.join(lib_root, entry)
+                    if os.path.isdir(sub) and ("linux-gnu" in entry or "arm" in entry):
+                        multiarch_paths.append(sub)
+            ld_path = ":".join(multiarch_paths)
+            current_ld = env.get("LD_LIBRARY_PATH", "")
+            env["LD_LIBRARY_PATH"] = f"{ld_path}:{current_ld}".strip(":")
 
             try:
                 subprocess.run([xdotool_bin, "key", keys], env=env, timeout=5)

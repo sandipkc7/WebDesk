@@ -123,6 +123,10 @@ sudo apt update && sudo apt install -y python3 openssl x11-xserver-utils pulseau
 * **`xdotool` & `xclip`**: Synthetic input injection and clipboard synchronization.
 
 ### 2.3 Compatibility Matrix
+* **CPU Architectures**:
+  - `x86_64` / `amd64` (Intel & AMD 64-bit PCs, laptops, and servers)
+  - `aarch64` / `arm64` (Raspberry Pi 4 / 5, Apple Silicon Linux VMs, ARM Cloud instances, Oracle Ampere, AWS Graviton)
+  - `armhf` (Raspberry Pi 2 / 3, 32-bit ARM SBCs)
 * **Desktop Environments**: XFCE, Cinnamon, MATE, LXDE, LXQt, GNOME (X11), KDE Plasma (X11).
 * **Display Managers (24/7 Login Screen)**: LightDM (`lightdm`), GDM3 (`gdm3`), SDDM (`sddm`).
 

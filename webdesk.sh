@@ -56,7 +56,9 @@ RDP_MODE="${RDP_MODE:-1}"
 RDP_ENABLED="${RDP_ENABLED:-false}"
 RDP_DESKTOP="${RDP_DESKTOP:-auto}"
 
-export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
+# Multiarch dynamic library resolution (amd64, arm64 / aarch64, armhf, etc.)
+MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//')
+export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
 export PATH="${VNC_ROOT}/usr/bin:${PATH}"
 export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
@@ -534,7 +536,8 @@ get_active_display_and_auth() {
 run_system_service() {
     export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
     export HOME="${USER_HOME}"
-    export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
+    MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//')
+    export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
     export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
     export PATH="${VNC_ROOT}/usr/bin:${PATH}"
 
