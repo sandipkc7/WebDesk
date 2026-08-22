@@ -322,6 +322,7 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 webdesk rdp-enable          # Installs and starts XRDP on port 3389
 webdesk rdp-disable         # Stops and disables the XRDP service
 webdesk rdp-mode <1|2|3>    # Switches between Mode 1 (Mirror), Mode 2 (Virtual), and Mode 3 (Multi-User)
+webdesk rdp-desktop         # Selects virtual desktop environment (MATE, XFCE, Cinnamon, LXDE, GNOME)
 webdesk rdp-status          # Displays active RDP listening port, mode, and connected Windows sessions
 webdesk rdp-port <PORT>     # Changes the default listening port (default: 3389)
 webdesk rdp-user            # Wizard to create a secondary Linux user for Mode 3

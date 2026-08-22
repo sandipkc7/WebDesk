@@ -54,6 +54,7 @@ fi
 RDP_PORT="${RDP_PORT:-3389}"
 RDP_MODE="${RDP_MODE:-1}"
 RDP_ENABLED="${RDP_ENABLED:-false}"
+RDP_DESKTOP="${RDP_DESKTOP:-auto}"
 
 export LD_LIBRARY_PATH="${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
@@ -1353,6 +1354,133 @@ EOF
     fi
 }
 
+select_rdp_desktop() {
+    local target_desk="${1:-}"
+    if [ -z "${target_desk}" ]; then
+        clear
+        echo -e "${BOLD}${CYAN}--- Select RDP Virtual Desktop Environment ---${NC}\n"
+        
+        local mate_status="[Available]"
+        command -v mate-session >/dev/null 2>&1 && mate_status="${GREEN}[Installed]${NC}"
+        local xfce_status="[Available]"
+        command -v xfce4-session >/dev/null 2>&1 && xfce_status="${GREEN}[Installed]${NC}"
+        local cinn_status="[Available]"
+        command -v cinnamon-session >/dev/null 2>&1 && cinn_status="${GREEN}[Installed]${NC}"
+        local lxde_status="[Available]"
+        command -v startlxde >/dev/null 2>&1 && lxde_status="${GREEN}[Installed]${NC}"
+        local gnome_status="[Available]"
+        command -v gnome-session >/dev/null 2>&1 && gnome_status="${GREEN}[Installed]${NC}"
+
+        echo -e "  ${BOLD}1)${NC} 🧉 MATE Desktop       ${mate_status}"
+        echo -e "  ${BOLD}2)${NC} 🐭 XFCE Desktop       ${xfce_status}"
+        echo -e "  ${BOLD}3)${NC} 🌿 Cinnamon Desktop   ${cinn_status}"
+        echo -e "  ${BOLD}4)${NC} 🪶 LXDE Desktop       ${lxde_status}"
+        echo -e "  ${BOLD}5)${NC} 🖥️  GNOME Desktop      ${gnome_status}"
+        echo -e "  ${BOLD}6)${NC} 🔍 Auto-Detect Active Session"
+        echo -e "  ${BOLD}0)${NC} ↩ Back\n"
+
+        read -rp "Select desktop environment [0-6]: " d_choice </dev/tty || return 0
+        case "$d_choice" in
+            1) target_desk="mate" ;;
+            2) target_desk="xfce" ;;
+            3) target_desk="cinnamon" ;;
+            4) target_desk="lxde" ;;
+            5) target_desk="gnome" ;;
+            6) target_desk="auto" ;;
+            0|*) return 0 ;;
+        esac
+    fi
+
+    local sess_cmd="mate-session"
+    local xdg_desk="MATE"
+    local desk_sess="mate"
+    local pkg_name=""
+
+    case "${target_desk}" in
+        mate)
+            sess_cmd="mate-session"
+            xdg_desk="MATE"
+            desk_sess="mate"
+            pkg_name="mate-desktop-environment-core mate-session-manager"
+            ;;
+        xfce)
+            sess_cmd="xfce4-session"
+            xdg_desk="XFCE"
+            desk_sess="xfce"
+            pkg_name="xfce4 xfce4-goodies"
+            ;;
+        cinnamon)
+            sess_cmd="cinnamon-session"
+            xdg_desk="X-Cinnamon"
+            desk_sess="cinnamon"
+            pkg_name="cinnamon-core"
+            ;;
+        lxde)
+            sess_cmd="startlxde"
+            xdg_desk="LXDE"
+            desk_sess="LXDE"
+            pkg_name="lxde-core"
+            ;;
+        gnome)
+            sess_cmd="gnome-session"
+            xdg_desk="GNOME"
+            desk_sess="gnome"
+            pkg_name="gnome-session"
+            ;;
+        auto|*)
+            sess_cmd=$(detect_desktop_session)
+            case "${sess_cmd}" in
+                mate-session) xdg_desk="MATE"; desk_sess="mate" ;;
+                xfce4-session) xdg_desk="XFCE"; desk_sess="xfce" ;;
+                cinnamon-session) xdg_desk="X-Cinnamon"; desk_sess="cinnamon" ;;
+                startlxde) xdg_desk="LXDE"; desk_sess="LXDE" ;;
+                gnome-session) xdg_desk="GNOME"; desk_sess="gnome" ;;
+            esac
+            ;;
+    esac
+
+    if ! command -v "${sess_cmd}" >/dev/null 2>&1 && [ -n "${pkg_name}" ]; then
+        echo -e "\n${YELLOW}[!] '${sess_cmd}' is not currently installed.${NC}"
+        read -rp "Would you like to install '${pkg_name}' via apt now? (y/N): " install_now </dev/tty || true
+        if [[ "$install_now" =~ ^[yY]$ ]]; then
+            echo -e "${BLUE}Installing ${pkg_name}...${NC}"
+            if [ "$EUID" -eq 0 ]; then
+                apt-get update -qq && apt-get install -y ${pkg_name}
+            else
+                sudo apt-get update -qq && sudo apt-get install -y ${pkg_name}
+            fi
+        else
+            echo -e "${RED}Desktop environment was not installed. Cancelled.${NC}"
+            return 1
+        fi
+    fi
+
+    local u_home="${USER_HOME}"
+    cat << EOF > "${u_home}/.xsessionrc"
+unset DBUS_SESSION_BUS_ADDRESS
+unset XDG_RUNTIME_DIR
+export XDG_CURRENT_DESKTOP=${xdg_desk}
+export DESKTOP_SESSION=${desk_sess}
+EOF
+    chmod +x "${u_home}/.xsessionrc"
+    chown "${REAL_USER}:${REAL_USER}" "${u_home}/.xsessionrc" 2>/dev/null || true
+
+    cat << EOF > "${u_home}/.xsession"
+#!/bin/sh
+unset DBUS_SESSION_BUS_ADDRESS
+unset XDG_RUNTIME_DIR
+export XDG_CURRENT_DESKTOP=${xdg_desk}
+export DESKTOP_SESSION=${desk_sess}
+exec ${sess_cmd}
+EOF
+    chmod +x "${u_home}/.xsession"
+    chown "${REAL_USER}:${REAL_USER}" "${u_home}/.xsession" 2>/dev/null || true
+
+    RDP_DESKTOP="${target_desk}"
+    save_config_var "RDP_DESKTOP" "${RDP_DESKTOP}"
+    echo -e "\n${GREEN}${BOLD}✔ RDP Desktop Environment set to: ${xdg_desk} (${sess_cmd})${NC}"
+}
+
 apply_rdp_config() {
     local mode="${1:-$RDP_MODE}"
     local port="${2:-$RDP_PORT}"
@@ -1657,13 +1785,14 @@ RDP_BANNER
         echo -e "  ${BOLD}1)${NC} 🟢 Enable & Start Windows RDP Server (Port ${RDP_PORT})"
         echo -e "  ${BOLD}2)${NC} 🔴 Disable & Stop Windows RDP Server"
         echo -e "  ${BOLD}3)${NC} 🔀 Select RDP Session Mode (Mirror / Virtual / Multi-User)"
-        echo -e "  ${BOLD}4)${NC} 👥 Create Secondary Linux User for Simultaneous Mode"
-        echo -e "  ${BOLD}5)${NC} ⚙️  Configure RDP Listening Port (Current: ${RDP_PORT})"
-        echo -e "  ${BOLD}6)${NC} 📜 View RDP Service & Connected Client Sessions"
-        echo -e "  ${BOLD}7)${NC} ℹ️  Windows Connection Walkthrough (mstsc.exe)"
+        echo -e "  ${BOLD}4)${NC} 🪟 Select Desktop Environment (MATE / XFCE / Cinnamon / LXDE / GNOME)"
+        echo -e "  ${BOLD}5)${NC} 👥 Create Secondary Linux User for Simultaneous Mode"
+        echo -e "  ${BOLD}6)${NC} ⚙️  Configure RDP Listening Port (Current: ${RDP_PORT})"
+        echo -e "  ${BOLD}7)${NC} 📜 View RDP Service & Connected Client Sessions"
+        echo -e "  ${BOLD}8)${NC} ℹ️  Windows Connection Walkthrough (mstsc.exe)"
         echo -e "  ${BOLD}0)${NC} ↩  Back to Administration Menu\n"
 
-        read -rp "Select an option [0-7]: " rdp_choice </dev/tty || break
+        read -rp "Select an option [0-8]: " rdp_choice </dev/tty || break
 
         case "$rdp_choice" in
             1)
@@ -1679,10 +1808,14 @@ RDP_BANNER
                 pause_prompt "Press Enter to return to RDP menu..."
                 ;;
             4)
-                create_rdp_secondary_user
+                select_rdp_desktop
                 pause_prompt "Press Enter to return to RDP menu..."
                 ;;
             5)
+                create_rdp_secondary_user
+                pause_prompt "Press Enter to return to RDP menu..."
+                ;;
+            6)
                 echo -e "\n${BLUE}${BOLD}[Configure RDP Listening Port]${NC}"
                 read -rp "Enter port number [default: 3389]: " new_port </dev/tty || true
                 new_port="${new_port:-3389}"
@@ -1695,11 +1828,11 @@ RDP_BANNER
                 fi
                 pause_prompt "Press Enter to return to RDP menu..."
                 ;;
-            6)
+            7)
                 show_rdp_status
                 pause_prompt "Press Enter to return to RDP menu..."
                 ;;
-            7)
+            8)
                 clear
                 echo -e "${BOLD}${CYAN}--- How to Connect from Windows via RDP ---${NC}\n"
                 echo -e "1. On your Windows PC, press ${CYAN}Win + R${NC}, type ${CYAN}mstsc${NC}, and hit ${BOLD}Enter${NC}."
@@ -2221,11 +2354,16 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
             create_rdp_secondary_user
         fi
         ;;
+    rdp-desktop)
+        if verify_master_password; then
+            select_rdp_desktop "${2:-}"
+        fi
+        ;;
     menu|interactive|"")
         interactive_menu
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac
