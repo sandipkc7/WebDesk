@@ -80,7 +80,7 @@ get_ips() {
 }
 
 is_running() {
-    pgrep -f "x11vnc" >/dev/null 2>&1 && pgrep -f "websockify" >/dev/null 2>&1
+    is_service_active || (pgrep -f "x11vnc" >/dev/null 2>&1 && pgrep -f "websockify" >/dev/null 2>&1)
 }
 
 is_service_installed() {
@@ -403,6 +403,16 @@ stop_webdesk_silent() {
 }
 
 start_webdesk() {
+    if is_service_active; then
+        echo -e "${GREEN}${BOLD}✔ WebDesk 24/7 system service is ALREADY ACTIVE (Port ${WEB_PORT})!${NC}\n"
+        echo -e "${BOLD}Access the encrypted desktop in your host PC browser:${NC}"
+        for ip in $(get_ips); do
+            echo -e "  👉 ${CYAN}https://${ip}:${WEB_PORT}/${NC}"
+        done
+        echo ""
+        return 0
+    fi
+
     if is_service_installed && [ "${1:-}" != "--user-only" ]; then
         echo -e "${BLUE}${BOLD}[WebDesk]${NC} Starting 24/7 systemd background service..."
         if [ "$EUID" -eq 0 ]; then
@@ -411,7 +421,7 @@ start_webdesk() {
             sudo systemctl start webdesk.service 2>/dev/null || true
         fi
         sleep 1.5
-        if is_running; then
+        if is_service_active || is_running; then
             echo -e "${GREEN}${BOLD}✔ WebDesk system service is ACTIVE (Encrypted HTTPS / WSS) on port ${WEB_PORT}!${NC}\n"
             echo -e "${BOLD}Access the encrypted desktop in your host PC browser:${NC}"
             for ip in $(get_ips); do
