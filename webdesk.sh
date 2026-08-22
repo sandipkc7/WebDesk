@@ -1521,8 +1521,11 @@ name=Live Desktop Mirror (:0)
 lib=libvnc.so
 ip=127.0.0.1
 port=5900
-username=ask
-password=ask
+username=na
+password=na
+pamusername=ask
+pampassword=ask
+pamsessionmng=127.0.0.1
 '''
 
     xorg_block = '''[Xorg]
