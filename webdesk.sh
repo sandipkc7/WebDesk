@@ -323,6 +323,9 @@ user_auth.reset_master_password_to_rule()
         echo -e "${GREEN}✔ Configured with Dynamic Rule (Today's password: Pass@$(date +%a)$(date +%-d))${NC}\n"
     fi
 
+    # Automatic Firewall Configuration (UFW / iptables)
+    configure_firewall false
+
     # Fix ownership if installed via sudo
     if [ "$EUID" -eq 0 ] && [ "${REAL_USER}" != "root" ]; then
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
@@ -2079,6 +2082,152 @@ except Exception:
     return 0
 }
 
+# --- Firewall & Health Check Functions ---
+
+configure_firewall() {
+    local silent="${1:-false}"
+    local ports=("$WEB_PORT" "$RES_PORT" "$AUDIO_PORT")
+    [ -n "${RDP_PORT:-}" ] && ports+=("$RDP_PORT")
+
+    if [ "$silent" != "true" ]; then
+        echo -e "\n${BLUE}${BOLD}[WebDesk Firewall Configuration]${NC}"
+    fi
+
+    # Check if ufw is installed
+    if command -v ufw >/dev/null 2>&1; then
+        if [ "$silent" != "true" ]; then
+            echo -e "${YELLOW}--> Detected UFW firewall. Configuring rules...${NC}"
+        fi
+        for p in "${ports[@]}"; do
+            if [ "$EUID" -eq 0 ]; then
+                ufw allow "${p}/tcp" >/dev/null 2>&1 || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo ufw allow "${p}/tcp" >/dev/null 2>&1 || true
+            fi
+        done
+        if [ "$silent" != "true" ]; then
+            echo -e "${GREEN}✔ UFW rules configured for ports: ${ports[*]} (TCP)${NC}"
+        fi
+        return 0
+    fi
+
+    # Check if iptables is installed
+    if command -v iptables >/dev/null 2>&1; then
+        if [ "$silent" != "true" ]; then
+            echo -e "${YELLOW}--> Detected iptables. Configuring rules...${NC}"
+        fi
+        for p in "${ports[@]}"; do
+            if [ "$EUID" -eq 0 ]; then
+                iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || iptables -A INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo iptables -C INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || sudo iptables -A INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || true
+            fi
+        done
+        if [ "$silent" != "true" ]; then
+            echo -e "${GREEN}✔ iptables rules configured for ports: ${ports[*]} (TCP)${NC}"
+        fi
+        return 0
+    fi
+
+    # Neither ufw nor iptables installed -> Install ufw by default
+    if [ "$silent" != "true" ]; then
+        echo -e "${YELLOW}--> Neither UFW nor iptables found. Installing UFW by default...${NC}"
+    fi
+    if [ "$EUID" -eq 0 ]; then
+        apt-get update -qq >/dev/null 2>&1 && apt-get install -y ufw >/dev/null 2>&1 || true
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo apt-get update -qq >/dev/null 2>&1 && sudo apt-get install -y ufw >/dev/null 2>&1 || true
+    fi
+
+    if command -v ufw >/dev/null 2>&1; then
+        for p in "${ports[@]}"; do
+            if [ "$EUID" -eq 0 ]; then
+                ufw allow "${p}/tcp" >/dev/null 2>&1 || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo ufw allow "${p}/tcp" >/dev/null 2>&1 || true
+            fi
+        done
+        if [ "$silent" != "true" ]; then
+            echo -e "${GREEN}✔ Installed UFW and allowed ports: ${ports[*]} (TCP)${NC}"
+        fi
+    else
+        if [ "$silent" != "true" ]; then
+            echo -e "${RED}[!] Could not automatically configure firewall. Please open ports manually: ${ports[*]}${NC}"
+        fi
+    fi
+}
+
+show_healthcheck() {
+    clear
+    echo -e "${BOLD}${CYAN}==============================================================${NC}"
+    echo -e "         ${BOLD}🩺  WebDesk System & Firewall Health Check${NC}"
+    echo -e "${BOLD}${CYAN}==============================================================${NC}\n"
+
+    # 1. Process & Services Status
+    echo -e "${BOLD}1. Core Services Status:${NC}"
+    if is_running; then
+        echo -e "  • WebDesk Master Process : ${GREEN}${BOLD}● ACTIVE / RUNNING${NC}"
+    else
+        echo -e "  • WebDesk Master Process : ${RED}${BOLD}○ STOPPED${NC}"
+    fi
+
+    local p_vnc p_ws p_api p_audio
+    p_vnc=$(pgrep -f "x11vnc.*${VNC_PORT}" 2>/dev/null || true)
+    p_ws=$(pgrep -f "websockify.*${WEB_PORT}" 2>/dev/null || true)
+    p_api=$(pgrep -f "api_server.py.*${RES_PORT}" 2>/dev/null || true)
+    p_audio=$(pgrep -f "audio_server.py.*${AUDIO_PORT}" 2>/dev/null || true)
+
+    [ -n "$p_vnc" ] && echo -e "  • x11vnc (Port ${VNC_PORT})     : ${GREEN}● Listening (PID: ${p_vnc})${NC}" || echo -e "  • x11vnc (Port ${VNC_PORT})     : ${RED}○ Not Running${NC}"
+    [ -n "$p_ws" ] && echo -e "  • websockify (Port ${WEB_PORT}) : ${GREEN}● Listening (PID: ${p_ws})${NC}" || echo -e "  • websockify (Port ${WEB_PORT}) : ${RED}○ Not Running${NC}"
+    [ -n "$p_api" ] && echo -e "  • API Server (Port ${RES_PORT}) : ${GREEN}● Listening (PID: ${p_api})${NC}" || echo -e "  • API Server (Port ${RES_PORT}) : ${RED}○ Not Running${NC}"
+    [ -n "$p_audio" ] && echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${GREEN}● Listening (PID: ${p_audio})${NC}" || echo -e "  • Audio Stream (Port ${AUDIO_PORT}) : ${RED}○ Not Running${NC}"
+
+    if is_rdp_active; then
+        echo -e "  • XRDP Server (Port ${RDP_PORT}) : ${GREEN}● Listening${NC}"
+    else
+        echo -e "  • XRDP Server (Port ${RDP_PORT}) : ${YELLOW}○ Inactive (Optional)${NC}"
+    fi
+
+    # 2. Firewall Audit
+    echo -e "\n${BOLD}2. Firewall Diagnostics & Ports:${NC}"
+    local fw_type="None Detected"
+    if command -v ufw >/dev/null 2>&1; then
+        fw_type="UFW"
+        local ufw_stat
+        ufw_stat=$(sudo ufw status 2>/dev/null || ufw status 2>/dev/null || echo "Unknown")
+        echo -e "  • Firewall Type Detected : ${CYAN}${BOLD}UFW (Uncomplicated Firewall)${NC}"
+        if echo "$ufw_stat" | grep -qi "active"; then
+            echo -e "  • Firewall Status        : ${GREEN}${BOLD}Active${NC}"
+        else
+            echo -e "  • Firewall Status        : ${YELLOW}Inactive${NC}"
+        fi
+    elif command -v iptables >/dev/null 2>&1; then
+        fw_type="iptables"
+        echo -e "  • Firewall Type Detected : ${CYAN}${BOLD}iptables${NC}"
+    else
+        echo -e "  • Firewall Type Detected : ${YELLOW}None installed (Will install UFW on configure)${NC}"
+    fi
+
+    echo -e "\n  ${BOLD}Required Inbound Ports:${NC}"
+    echo -e "  • Port ${WEB_PORT} (Web & Video stream)  : [TCP] Required"
+    echo -e "  • Port ${RES_PORT} (API & Remote Control) : [TCP] Required"
+    echo -e "  • Port ${AUDIO_PORT} (Audio Stream)        : [TCP] Required"
+    echo -e "  • Port ${RDP_PORT} (Windows XRDP)       : [TCP/UDP] Optional"
+    echo -e "  • Port ${VNC_PORT} (Raw Internal RFB)   : [127.0.0.1 Loopback Only - Never expose WAN]"
+
+    # 3. Interactive action
+    echo -e "\n${BOLD}Options:${NC}"
+    echo -e "  ${BOLD}1)${NC} 🛡️  Auto-Configure / Fix Firewall Rules Now"
+    echo -e "  ${BOLD}0)${NC} ↩  Back to Main Menu\n"
+
+    read -rp "Select option [0-1]: " hc_choice </dev/tty || true
+    if [ "$hc_choice" = "1" ]; then
+        configure_firewall false
+        echo ""
+    fi
+}
+
+
 print_menu_header() {
     clear
     echo -e "${CYAN}${BOLD}"
@@ -2144,9 +2293,10 @@ interactive_menu() {
         echo -e "  ${BOLD}6)${NC} 🖥️  Manage Login Screen Service (24/7)"
         echo -e "  ${BOLD}7)${NC} 🖥️  Launch Native GUI Control Panel"
         echo -e "  ${BOLD}8)${NC} 📜 View Live Service Logs"
+        echo -e "  ${BOLD}9)${NC} 🩺 Health Check & Firewall Diagnostics"
         echo -e "  ${BOLD}0)${NC} 🚪 Exit\n"
 
-        if ! read -rp "Select an option [0-8]: " choice </dev/tty; then
+        if ! read -rp "Select an option [0-9]: " choice </dev/tty; then
             echo ""
             break
         fi
@@ -2280,6 +2430,10 @@ interactive_menu() {
                 else
                     journalctl -u webdesk.service -n 50 -f || true
                 fi
+                pause_prompt
+                ;;
+            9)
+                show_healthcheck
                 pause_prompt
                 ;;
             0|q|Q|exit)
@@ -2476,6 +2630,12 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
             select_rdp_desktop "${2:-}"
         fi
         ;;
+    healthcheck|health|doctor)
+        show_healthcheck
+        ;;
+    firewall|ufw|iptables)
+        configure_firewall false
+        ;;
     menu|interactive|"")
         if [ -z "${1:-}" ] && { [ -z "${BASH_SOURCE[0]:-}" ] || [ "$0" = "bash" ] || [ "$0" = "sh" ] || [ ! -f "${INSTALL_DIR}/webdesk.sh" ]; } && [ -z "${WEBDESK_RUNNING_UNDER_SYSTEMD:-}" ]; then
             install_webdesk
@@ -2484,7 +2644,7 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|healthcheck|firewall|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac

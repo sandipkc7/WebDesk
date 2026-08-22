@@ -78,16 +78,22 @@ WebDesk provides a unified dual-protocol engine serving both web and native desk
 | **`6086`** | `WSS` | Audio Streamer | Low-latency live desktop audio stream via Web Audio API |
 | **`5900`** | `TCP` (Internal) | x11vnc RFB | Local loopback stream (`127.0.0.1` only, blocked from WAN) |
 
-#### Firewall Configuration
-To allow remote access, configure your firewall (UFW, iptables, or Cloud Security Groups) to allow the following **Incoming (Inbound)** connections:
+#### Firewall Configuration & Health Check
+WebDesk automatically handles firewall configuration during installation and via the interactive menu (`webdesk healthcheck` or Menu Option 9):
+- If **UFW** is installed, WebDesk automatically allows the required ports.
+- If only **iptables** is installed, WebDesk appends the required `INPUT` rules without installing extra firewall packages.
+- If neither is installed, WebDesk installs **UFW** by default and configures the rules.
+
+Required **Incoming (Inbound)** connections:
 - **TCP `6080`**: Required for the main Web Interface and noVNC video stream.
 - **TCP `6085`**: Required for REST API authentication, RBAC, and file transfers.
 - **TCP `6086`**: Required for the live Audio WebSocket stream.
 - **TCP/UDP `3389`**: *(Optional)* Required only if you plan to use the Native Windows RDP (XRDP) feature.
+- **TCP `5900`**: *(Internal Loopback Only)* Used internally between x11vnc and websockify (`127.0.0.1`), blocked from WAN for security.
 
 **Outgoing (Outbound)** connections:
-- No specific outgoing ports are strictly required for the daily operation of this script on a LAN. 
-- However, standard outbound internet access (**TCP `80` / `443`**) is required during the initial installation to download packages (`apt-get`) and retrieve resources.
+- No specific outgoing ports are strictly required for daily operation on a LAN. 
+- Standard outbound internet access (**TCP `80` / `443`**) is required during the initial installation to download packages (`apt-get`) and retrieve resources.
 
 ### Runtime Directory Layout (`~/.local/share/webdesk/`)
 ```text
