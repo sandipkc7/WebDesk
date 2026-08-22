@@ -369,9 +369,9 @@ webdesk rdp-menu            # Opens the interactive RDP configuration menu
 <details>
 <summary><b>📐 9.2 Dynamic Screen Resolution Matching</b></summary>
 
-* **One-Click `🎯 Match Res`**: Dynamically calculates the browser window dimensions and Device Pixel Ratio ($DPR$) to resize the host X11 display instantly.
+* **One-Click `🎯 Auto Match`**: Dynamically calculates the browser window dimensions and Device Pixel Ratio ($DPR$) to resize the host X11 display instantly.
 * **Auto-Match on Login (`auto`)**: Automatically measures the client viewport upon login to eliminate letterboxing or black bars.
-* **Standard Presets**: Supports `2560x1440` (2K), `1920x1080` (Full HD), `1600x900`, `1440x900`, `1366x768`, `1280x720` (720p), and custom user modes.
+* **Standard Presets (10 Modes)**: Supports `2560x1440` (2K QHD), `1920x1200` (WUXGA), `1920x1080` (Full HD), `1600x900` (HD+), `1440x900` (MacBook), `1366x768` (Laptop), `1280x1024` (5:4), `1280x960` (4:3), `1280x800` (16:10), `1280x720` (720p HD), and custom user modes.
 
 </details>
 
