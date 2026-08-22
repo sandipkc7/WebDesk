@@ -269,10 +269,19 @@ install_webdesk() {
     generate_ssl_cert
     ensure_index_page
 
-    # Master Security Initialization (Interactive vs Non-Interactive)
+    # Master Security Initialization
     local init_mp_choice="1"
     local today_pass="Pass@$(date +%a)$(date +%-d)"
-    if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
+
+    # Open TTY directly for user interaction if available
+    local tty_in=""
+    if [ -r /dev/tty ]; then
+        tty_in="/dev/tty"
+    elif [ -t 0 ]; then
+        tty_in="-"
+    fi
+
+    if [ -n "$tty_in" ]; then
         clear 2>/dev/null || true
         echo -e "\n${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════════════╗"
         echo -e "║                 🔒 WebDesk Master Password Setup                     ║"
@@ -290,26 +299,44 @@ install_webdesk() {
         echo -e "${CYAN}────────────────────────────────────────────────────────────────────────${NC}"
 
         while true; do
-            read -rp "Select mode [1 or 2] (Default: 1): " init_mp_choice < /dev/tty 2>/dev/null || init_mp_choice="1"
+            echo -en "  ${BOLD}Select mode [1 or 2] (Default: 1): ${NC}"
+            if [ "$tty_in" = "/dev/tty" ]; then
+                read -r init_mp_choice </dev/tty 2>/dev/null || init_mp_choice="1"
+            else
+                read -r init_mp_choice || init_mp_choice="1"
+            fi
             [ -z "$init_mp_choice" ] && init_mp_choice="1"
 
             if [ "$init_mp_choice" = "1" ]; then
                 echo -e "\n${BLUE}${BOLD}--> Setting Custom Master Password:${NC}"
                 while true; do
-                    read -rsp "  🔑 Enter Master Password (min 6 characters): " init_pw < /dev/tty 2>/dev/null || true
+                    echo -en "  🔑 Enter Master Password (min 6 chars): "
+                    if [ "$tty_in" = "/dev/tty" ]; then
+                        read -rs init_pw </dev/tty 2>/dev/null || true
+                    else
+                        read -rs init_pw || true
+                    fi
                     echo ""
+
                     if [ -z "${init_pw}" ]; then
-                        echo -e "  ${YELLOW}Password cannot be empty. Try again or enter Ctrl+C to exit.${NC}"
+                        echo -e "  ${YELLOW}Password cannot be empty. Please enter a password.${NC}"
                         continue
                     fi
                     if [ ${#init_pw} -lt 6 ]; then
                         echo -e "  ${RED}✖ Password must be at least 6 characters long. Try again.${NC}"
                         continue
                     fi
-                    read -rsp "  🔑 Confirm Master Password: " init_pw_conf < /dev/tty 2>/dev/null || true
+
+                    echo -en "  🔑 Re-enter / Confirm Master Password: "
+                    if [ "$tty_in" = "/dev/tty" ]; then
+                        read -rs init_pw_conf </dev/tty 2>/dev/null || true
+                    else
+                        read -rs init_pw_conf || true
+                    fi
                     echo ""
+
                     if [ "$init_pw" != "$init_pw_conf" ]; then
-                        echo -e "  ${RED}✖ Passwords do not match. Try again.${NC}\n"
+                        echo -e "  ${RED}✖ Passwords do not match. Please try again.${NC}\n"
                         continue
                     fi
 
