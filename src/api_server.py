@@ -556,6 +556,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                     f.write(f"PROFILE={prof}\n")
             except Exception:
                 pass
+            user_auth.update_user_settings(user["username"], {"profile": prof})
             self.send_json(200, {"ok": True, "success": True, "profile": prof})
             return
 
@@ -597,6 +598,7 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                             active_output = line.split()[0]
                             break
                     subprocess.run(["xrandr", "--output", active_output, "--mode", res], env=env, timeout=5)
+                user_auth.update_user_settings(user["username"], {"resolution": res})
                 self.send_json(200, {"ok": True, "success": True, "resolution": res, "applied": res})
             except Exception as e:
                 self.send_json(500, {"ok": False, "success": False, "error": str(e)})

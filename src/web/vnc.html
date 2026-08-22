@@ -697,7 +697,11 @@
                     }
                     const data = await res.json();
                     this.user = data.user || data;
+                    if (data.settings && !this.user.settings) this.user.settings = data.settings;
                     this.applyRolePermissions();
+                    if (window.WebDeskSettings && this.user && this.user.settings) {
+                        window.WebDeskSettings.applyUserSettings(this.user.settings);
+                    }
                     this.startHeartbeat();
                     return true;
                 } catch(e) {
@@ -1753,7 +1757,66 @@
             closeModal() {
                 document.getElementById('webdesk_settings_modal').classList.remove('open');
             },
+            applyUserSettings(st) {
+                if (!st || typeof st !== 'object') return;
+                
+                // 1. Resolution
+                if (st.resolution) {
+                    const resSelect = document.getElementById('hub_setting_resolution');
+                    if (resSelect) resSelect.value = st.resolution;
+                    if (st.resolution !== 'auto') {
+                        apiFetch('/api/set-resolution', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ resolution: st.resolution })
+                        }).catch(() => {});
+                    }
+                }
+                
+                // 2. Scaling
+                if (st.resize) {
+                    const scaleSelect = document.getElementById('hub_setting_scaling');
+                    if (scaleSelect) scaleSelect.value = st.resize;
+                    this.updateScaling(st.resize);
+                }
+                
+                // 3. Profile
+                if (st.profile) {
+                    const profSelect = document.getElementById('hub_setting_profile');
+                    if (profSelect) profSelect.value = st.profile;
+                    this.updateProfile(st.profile);
+                }
+                
+                // 4. Quality
+                if (typeof st.quality === 'number') {
+                    const qEl = document.getElementById('hub_setting_quality');
+                    if (qEl) {
+                        qEl.value = st.quality;
+                        this.updateQuality(st.quality);
+                    }
+                }
+                
+                // 5. Compression
+                if (typeof st.compression === 'number') {
+                    const cEl = document.getElementById('hub_setting_compression');
+                    if (cEl) {
+                        cEl.value = st.compression;
+                        this.updateCompression(st.compression);
+                    }
+                }
+            },
             syncCurrentValues() {
+                const user = window.WebDeskAuth && window.WebDeskAuth.user;
+                const st = (user && user.settings) || {};
+                
+                if (st.resolution) {
+                    const resSelect = document.getElementById('hub_setting_resolution');
+                    if (resSelect) resSelect.value = st.resolution;
+                }
+                if (st.profile) {
+                    const profSelect = document.getElementById('hub_setting_profile');
+                    if (profSelect) profSelect.value = st.profile;
+                }
                 const resizeEl = document.getElementById('noVNC_setting_resize');
                 if (resizeEl) {
                     document.getElementById('hub_setting_scaling').value = resizeEl.value;
@@ -1773,6 +1836,8 @@
                 if (val === 'auto') {
                     window.WebDeskRes.sync();
                     this.closeModal();
+                    // Persist auto resolution to user profile
+                    this.saveSingleSetting('resolution', 'auto');
                     return;
                 }
                 this.closeModal();
@@ -1784,6 +1849,10 @@
                     });
                     const data = await res.json();
                     if (res.ok && data.success) {
+                        if (window.WebDeskAuth && window.WebDeskAuth.user) {
+                            if (!window.WebDeskAuth.user.settings) window.WebDeskAuth.user.settings = {};
+                            window.WebDeskAuth.user.settings.resolution = val;
+                        }
                         window.WebDeskRes.showToast(`✔ Display resolution set to ${val}`);
                         setTimeout(() => { window.location.reload(); }, 1500);
                     } else {
@@ -1800,6 +1869,7 @@
                     resizeEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
                 try { localStorage.setItem('noVNC_resize', val); } catch(e) {}
+                this.saveSingleSetting('resize', val);
                 window.WebDeskRes.showToast(`Scaling mode: ${val}`);
             },
             updateQuality(val) {
@@ -1827,11 +1897,34 @@
                     });
                     const data = await res.json();
                     if (data.ok || data.success) {
+                        if (window.WebDeskAuth && window.WebDeskAuth.user) {
+                            if (!window.WebDeskAuth.user.settings) window.WebDeskAuth.user.settings = {};
+                            window.WebDeskAuth.user.settings.profile = prof;
+                        }
                         window.WebDeskRes.showToast(`✔ Speed Profile: ${prof}`);
                     }
                 } catch(e) {}
             },
+            async saveSingleSetting(key, value) {
+                try {
+                    const payload = {};
+                    payload[key] = value;
+                    await apiFetch('/api/save-settings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${window.WebDeskAuth.token}`
+                        },
+                        body: JSON.stringify({ settings: payload })
+                    });
+                    if (window.WebDeskAuth && window.WebDeskAuth.user) {
+                        if (!window.WebDeskAuth.user.settings) window.WebDeskAuth.user.settings = {};
+                        window.WebDeskAuth.user.settings[key] = value;
+                    }
+                } catch(e) {}
+            },
             async savePreferences() {
+                const resolution = document.getElementById('hub_setting_resolution').value;
                 const scaling = document.getElementById('hub_setting_scaling').value;
                 const profile = document.getElementById('hub_setting_profile').value;
                 const quality = parseInt(document.getElementById('hub_setting_quality').value);
@@ -1846,6 +1939,7 @@
                         },
                         body: JSON.stringify({
                             settings: {
+                                resolution: resolution,
                                 resize: scaling,
                                 profile: profile,
                                 quality: quality,
@@ -1853,6 +1947,11 @@
                             }
                         })
                     });
+                    if (window.WebDeskAuth && window.WebDeskAuth.user) {
+                        window.WebDeskAuth.user.settings = Object.assign(window.WebDeskAuth.user.settings || {}, {
+                            resolution, resize: scaling, profile, quality, compression
+                        });
+                    }
                     window.WebDeskRes.showToast("💾 Saved Display Preferences to Account");
                 } catch(e) {
                     window.WebDeskRes.showToast("✔ Settings Applied locally");
@@ -2106,7 +2205,13 @@
                                 isHubInitialized = true;
                             }
                         }
-                        setTimeout(() => window.WebDeskRes.sync(), 1000);
+                        setTimeout(() => {
+                            const u = window.WebDeskAuth && window.WebDeskAuth.user;
+                            const st = (u && u.settings) || {};
+                            if (!st.resolution || st.resolution === 'auto') {
+                                window.WebDeskRes.sync();
+                            }
+                        }, 1000);
                         setTimeout(() => window.WebDeskAudio.init(), 1500);
                     } else if (statusText.includes('disconnected') || statusText.includes('connecting') || !hasToken) {
                         // Not connected or logged out - hide hub completely
