@@ -309,20 +309,24 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 | **Mode 3** | **👥 Multi-User Simultaneous Workstation** | Allows a secondary Linux user (e.g. `remoteuser`) to work simultaneously without sharing the mouse with the local user. |
 
 <details>
-<summary><b>🪟 View Windows Connection Walkthrough & Management Commands</b></summary>
+<summary><b>🪟 View Windows Connection Walkthrough, Security Model & Management Commands</b></summary>
 
-#### How to Connect from Windows:
+#### 🔒 Security & PAM System Authentication
+* **Strict Linux PAM Verification**: All RDP modes (including Live Mirror) authenticate directly against the central Linux PAM security stack (`/etc/pam.d/xrdp-sesman`). Incorrect passwords immediately trigger `Login failed` and block access.
+* **Single-Mode Auto-Select**: XRDP dynamically writes only the active mode chosen in WebDesk, eliminating redundant session dropdowns in Windows `mstsc.exe` and rendering a clean 2-field login dialog (Username & Password).
+
+#### 🪟 How to Connect from Windows:
 1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `mstsc`, and press **Enter**.
 2. In the **Computer** field, enter your Linux IP and port (e.g. `192.168.1.25:3389`).
 3. Click **Connect**.
 4. Enter your Linux username (`remotelinuxuser`) and system password.
 
-#### RDP CLI Commands:
+#### 🛠️ RDP CLI Commands:
 ```bash
 webdesk rdp-enable          # Installs and starts XRDP on port 3389
 webdesk rdp-disable         # Stops and disables the XRDP service
 webdesk rdp-mode <1|2|3>    # Switches between Mode 1 (Mirror), Mode 2 (Virtual), and Mode 3 (Multi-User)
-webdesk rdp-desktop         # Selects virtual desktop environment (MATE, XFCE, Cinnamon, LXDE, GNOME)
+webdesk rdp-desktop [env]   # Selects virtual desktop: mate, xfce, cinnamon, lxde, gnome, auto
 webdesk rdp-status          # Displays active RDP listening port, mode, and connected Windows sessions
 webdesk rdp-port <PORT>     # Changes the default listening port (default: 3389)
 webdesk rdp-user            # Wizard to create a secondary Linux user for Mode 3
