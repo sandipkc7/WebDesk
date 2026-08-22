@@ -2574,6 +2574,10 @@ case "${1}" in
     install)
         install_webdesk
         ;;
+    reinstall|update|upgrade)
+        echo -e "${BLUE}${BOLD}[WebDesk]${NC} Fetching latest version and reinstalling..."
+        bash -c "$(curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh)"
+        ;;
     remove|uninstall|purge)
         remove_webdesk "${2:-}"
         ;;
@@ -2713,7 +2717,7 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|healthcheck|firewall|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|healthcheck|firewall|reinstall|update|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
         exit 1
         ;;
 esac
