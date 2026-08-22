@@ -8,7 +8,7 @@
 
 ### 🚀 1-Line Automated Installation
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh)"
 ```
 *or download and run directly:*
 ```bash

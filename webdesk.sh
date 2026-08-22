@@ -105,8 +105,8 @@ ensure_runtime_files() {
         elif [ -f "${SCRIPT_DIR}/${py_file}" ]; then
             cp -u "${SCRIPT_DIR}/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || cp "${SCRIPT_DIR}/${py_file}" "${INSTALL_DIR}/" 2>/dev/null || true
         elif [ ! -f "${INSTALL_DIR}/${py_file}" ]; then
-            curl -fsSL "${GITHUB_RAW}/src/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || \
-            curl -fsSL "${GITHUB_RAW}/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || true
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || \
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/${py_file}" -o "${INSTALL_DIR}/${py_file}" 2>/dev/null || true
         fi
     done
 
@@ -120,7 +120,7 @@ ensure_runtime_files() {
             cp -u "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || cp "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
             cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         elif [ ! -f "${VNC_ROOT}/usr/share/novnc/vnc.html" ] || ! grep -q "webdesk_hub" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null; then
-            curl -fsSL "${GITHUB_RAW}/src/web/vnc.html" -o "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/vnc.html" -o "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
             cp "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         fi
 
@@ -130,7 +130,7 @@ ensure_runtime_files() {
         elif [ -f "${SCRIPT_DIR}/login.html" ]; then
             cp -u "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || cp "${SCRIPT_DIR}/login.html" "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
         elif [ ! -f "${VNC_ROOT}/usr/share/novnc/login.html" ]; then
-            curl -fsSL "${GITHUB_RAW}/src/web/login.html" -o "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/login.html" -o "${VNC_ROOT}/usr/share/novnc/login.html" 2>/dev/null || true
         fi
 
         # webdesk.css
@@ -139,7 +139,7 @@ ensure_runtime_files() {
         elif [ -f "${SCRIPT_DIR}/app/styles/webdesk.css" ]; then
             cp -u "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || cp "${SCRIPT_DIR}/app/styles/webdesk.css" "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
         elif [ ! -f "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" ]; then
-            curl -fsSL "${GITHUB_RAW}/src/web/app/styles/webdesk.css" -o "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/app/styles/webdesk.css" -o "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
         fi
     fi
 
@@ -238,10 +238,12 @@ install_webdesk() {
 
     # Self-install webdesk script to permanent directory
     mkdir -p "${INSTALL_DIR}"
-    if [ -f "${SCRIPT_PATH}" ] && grep -q 'APP_NAME="WebDesk"' "${SCRIPT_PATH}" 2>/dev/null; then
+    if [ -f "${SCRIPT_PATH:-}" ] && grep -q 'APP_NAME="WebDesk"' "${SCRIPT_PATH}" 2>/dev/null; then
         cp -f "${SCRIPT_PATH}" "${INSTALL_DIR}/webdesk.sh"
+    elif [ -f "./webdesk.sh" ] && grep -q 'APP_NAME="WebDesk"' "./webdesk.sh" 2>/dev/null; then
+        cp -f "./webdesk.sh" "${INSTALL_DIR}/webdesk.sh"
     else
-        curl -fsSL "https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh" -o "${INSTALL_DIR}/webdesk.sh" 2>/dev/null || true
+        curl -fsSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/sandipkc7/WebDesk/main/webdesk.sh" -o "${INSTALL_DIR}/webdesk.sh" 2>/dev/null || true
     fi
     chmod +x "${INSTALL_DIR}/webdesk.sh" 2>/dev/null || true
 
