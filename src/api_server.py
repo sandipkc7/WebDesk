@@ -641,43 +641,87 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 self.send_json(500, {"ok": False, "success": False, "error": str(e)})
             return
 
-        # 14. Power Actions
+        # 14. Power & Remote Session Actions
         if path in ["/api/power", "/api/auth/power"]:
             user, err = self.get_token_user()
             if not user:
                 self.send_json(401, {"ok": False, "success": False, "error": err or "Authentication required."})
                 return
-            if user.get("role") != "admin":
-                self.send_json(403, {"ok": False, "success": False, "error": "Administrative permissions required for power actions."})
+            if user.get("role") == "viewer":
+                self.send_json(403, {"ok": False, "success": False, "error": "Guest accounts cannot execute session actions."})
                 return
 
             data = self.read_json_body()
-            action = data.get("action", "").lower()
+            action = data.get("action", "").lower().strip()
             display = os.environ.get("DISPLAY", ":0")
             env = dict(os.environ, DISPLAY=display)
 
+            current_user = os.environ.get("USER")
+            if not current_user or current_user == "root":
+                try:
+                    for u in sorted(os.listdir("/home")):
+                        if os.path.exists(os.path.join("/home", u, ".local")):
+                            current_user = u
+                            break
+                except Exception:
+                    pass
+            current_user = current_user or "sandeep"
+
             try:
                 if action == "lock":
-                    subprocess.Popen(["xdg-screensaver", "lock"], env=env)
-                elif action in ["switch-user", "switch_user", "switchuser"]:
+                    # Lock screen via systemd / DM / X11
+                    subprocess.Popen(["loginctl", "lock-sessions"], env=env)
                     if shutil.which("dm-tool"):
-                        subprocess.Popen(["dm-tool", "switch-to-greeter"])
-                    elif shutil.which("gdmflexiserver"):
-                        subprocess.Popen(["gdmflexiserver"])
-                    else:
-                        subprocess.Popen(["loginctl", "lock-session"])
-                elif action == "logout":
-                    subprocess.Popen(["loginctl", "terminate-user", os.environ.get("USER", "sandeep")])
-                elif action == "suspend":
-                    subprocess.Popen(["systemctl", "suspend"])
-                elif action == "reboot":
-                    subprocess.Popen(["systemctl", "reboot"])
-                elif action == "poweroff":
-                    subprocess.Popen(["systemctl", "poweroff"])
-                else:
-                    self.send_json(400, {"ok": False, "success": False, "error": f"Unknown power action: {action}"})
+                        subprocess.Popen(["dm-tool", "lock"], env=env)
+                    elif shutil.which("xflock4"):
+                        subprocess.Popen(["xflock4"], env=env)
+                    elif shutil.which("xdg-screensaver"):
+                        subprocess.Popen(["xdg-screensaver", "lock"], env=env)
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": "Screen locked."})
                     return
-                self.send_json(200, {"ok": True, "success": True, "action": action, "message": f"Action '{action}' executed."})
+
+                elif action in ["switch-user", "switch_user", "switchuser"]:
+                    # Switch user to greeter login
+                    if shutil.which("dm-tool"):
+                        subprocess.Popen(["dm-tool", "switch-to-greeter"], env=env)
+                    elif shutil.which("gdmflexiserver"):
+                        subprocess.Popen(["gdmflexiserver"], env=env)
+                    else:
+                        subprocess.Popen(["loginctl", "lock-sessions"], env=env)
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": "Switched to login greeter."})
+                    return
+
+                elif action == "logout":
+                    # Terminate user session
+                    subprocess.Popen(["loginctl", "terminate-user", current_user], env=env)
+                    if shutil.which("gnome-session-quit"):
+                        subprocess.Popen(["gnome-session-quit", "--logout", "--no-prompt"], env=env)
+                    elif shutil.which("pkill"):
+                        subprocess.Popen(["pkill", "-u", current_user, "xfce4-session|lxsession|mate-session"], env=env)
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": f"Session for '{current_user}' logged out."})
+                    return
+
+                elif action == "suspend":
+                    # Sleep / Suspend
+                    if shutil.which("systemctl"):
+                        subprocess.Popen(["systemctl", "suspend"])
+                    else:
+                        subprocess.Popen(["loginctl", "suspend"])
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": "System suspend initiated."})
+                    return
+
+                elif action == "reboot":
+                    # Reboot
+                    if shutil.which("systemctl"):
+                        subprocess.Popen(["systemctl", "reboot"])
+                    else:
+                        subprocess.Popen(["loginctl", "reboot"])
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": "System reboot initiated."})
+                    return
+
+                else:
+                    self.send_json(400, {"ok": False, "success": False, "error": f"Unknown or unsupported power action: {action}"})
+                    return
             except Exception as e:
                 self.send_json(500, {"ok": False, "success": False, "error": str(e)})
             return
