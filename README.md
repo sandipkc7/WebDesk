@@ -124,48 +124,87 @@ All persistent runtime assets, databases, logs, and configurations are deployed 
 
 ---
 
-## 3. Prerequisites & Installation
+---
 
-### ⚡ 1-Line Quick Installation
-Run this single command in your terminal to download and install WebDesk automatically:
+## 3. Prerequisites, Apps & Libraries
 
+WebDesk is designed to be **completely self-contained**. It runs entirely in user-space without requiring external Python `pip` packages or root permissions for standard execution.
+
+### 3.1 Host System Prerequisites & Libraries
+
+The following core packages are needed on the host system:
+
+| Package | Component | Purpose |
+| :--- | :--- | :--- |
+| **`python3`** (3.8+) | Runtime Engine | Runs the REST API (`api_server.py`), Audio Streamer (`audio_server.py`), and Auth Module (`user_auth.py`). **Zero `pip` packages required** (uses standard library modules: `ssl`, `http.server`, `urllib.parse`, `hashlib`, `hmac`, `json`, `subprocess`, `threading`, `secrets`, `socket`, `struct`, `base64`, `shutil`, `re`, `time`). |
+| **`openssl`** | Cryptography | Automatically creates 2048-bit self-signed SSL/TLS certificates (`webdesk.pem`, `webdesk.crt`, `webdesk.key`) for HTTPS & WSS encryption. |
+| **`x11-xserver-utils`** / **`xrandr`** | Display Control | Manages remote client resolution auto-matching and dynamic display scaling. |
+| **`pulseaudio-utils`** (`parec`) or **`pipewire`** (`pw-record`) | Sound Engine | Captures real-time raw desktop audio output for in-browser PCM streaming on port 6086. |
+| **`systemd`** / **`loginctl`** | Session Manager | Handles background system service daemonization (`webdesk.service`) and power actions (Lock, Switch User, Logout, Suspend, Reboot). |
+| **`curl`** & **`dpkg`** | Installer Utilities | Downloads and unpacks standalone components into `~/.local/share/webdesk/root/`. |
+
+#### Single-Command Host Prerequisites Installation (Debian / Ubuntu / Mint / Kali / Pop!_OS):
+```bash
+sudo apt update && sudo apt install -y python3 openssl x11-xserver-utils pulseaudio-utils curl dpkg
+```
+
+---
+
+### 3.2 Standalone Packages (Automatically Downloaded by `webdesk.sh`)
+
+During installation (`./webdesk.sh install`), WebDesk uses `apt-get download` and `dpkg -x` to extract these standalone binaries directly into `~/.local/share/webdesk/root/` (**No `sudo` or system-wide modifications required**):
+
+| Package | Bundled Binaries & Libraries | Description |
+| :--- | :--- | :--- |
+| **`x11vnc`** | `x11vnc` | High-performance VNC server connecting to active X11 display `DISPLAY=:0`. |
+| **`libvncserver1`** / **`libvncclient1`** | `libvncserver.so`, `libvncclient.so` | Core VNC protocol and encoding library. |
+| **`novnc`** | `vnc.html`, `app/`, `core/`, `vendor/` | HTML5 canvas web client and RFB protocol engine. |
+| **`websockify`** / **`python3-websockify`** | `websockify` | High-speed proxy converting WebSockets (port 6080) to TCP VNC stream (port 5900). |
+| **`xdotool`** / **`libxdo3`** | `xdotool`, `libxdo.so.3` | Synthetic keyboard and mouse input injection for X11. |
+| **`xclip`** / **`libxmu6`** | `xclip`, `libXmu.so.6` | Bidirectional X11 clipboard synchronization. |
+
+---
+
+### 3.3 Optional Dependencies
+
+* **Native GTK Desktop GUI (`webdesk_gui.py`)**:
+  ```bash
+  sudo apt install -y python3-gi gir1.2-gtk-3.0
+  ```
+* **Supported Display Managers (for 24/7 Login Screen Streaming)**:
+  - **LightDM** (`lightdm` / `dm-tool`) — *Recommended for instant cold-boot remote login*
+  - **GDM3** (`gdm3` / `gdmflexiserver`)
+  - **SDDM** (`sddm`)
+* **Supported Desktop Environments**:
+  - XFCE, LXDE, LXQt, MATE, Cinnamon, GNOME (X11), KDE Plasma (X11).
+
+---
+
+### 3.4 Installation Steps
+
+#### ⚡ 1-Line Quick Installation
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sandipkc7/Webdesk/main/webdesk.sh -o webdesk.sh && chmod +x webdesk.sh && ./webdesk.sh install
 ```
 
-During installation, the installer will prompt you to choose your **Master Security Mode**:
-1. **Set Custom Master Password** (Recommended)
-2. **Use Default Dynamic Daily Rule** (`Pass@<Day><Date>`, e.g. `Pass@Sat22`)
-
----
-
-### Prerequisites
-* **Operating System**: Linux (Linux Mint, Ubuntu, Debian, or derivatives).
-* **Architecture**: `x86_64`.
-* **Runtime**: Python 3.8+ with standard library, `openssl`, `xrandr`, `pulseaudio` or `pipewire`.
-
-### Manual Installation Steps
-
+#### Manual Installation Steps
 1. Make the script executable:
    ```bash
    chmod +x webdesk.sh
    ```
-
 2. Run the automated installer:
    ```bash
    ./webdesk.sh install
    ```
-
 3. The installer will:
+   * Download and unpack standalone dependencies into `~/.local/share/webdesk/root/`.
    * Generate 2048-bit self-signed SSL/TLS certificates (`webdesk.pem`).
    * Initialize the salted user database (`users.json`) with default credentials.
-   * Prompt to configure your preferred Master Password mode.
-   * Generate cryptographically secure session signing keys (`secret.key`).
+   * Prompt to configure your preferred Master Security Mode (Custom Password or Dynamic Daily Rule).
+   * Generate cryptographically secure HMAC session signing keys (`secret.key`).
 
-### Complete Uninstallation
-
+#### Complete Uninstallation
 To completely remove WebDesk from the host system (including all processes, systemd services, autostart entries, certificates, databases, and binaries):
-
 ```bash
 ./webdesk.sh remove
 ```
@@ -419,24 +458,31 @@ To guarantee security when sharing desktop streams with untrusted or guest viewe
 
 ---
 
-### 10.6 Special Key Forwarder & Desktop Shortcuts
+### 10.6 Special Key Forwarder & Dedicated Linux Shortcuts
 
-The Floating Action Hub provides one-touch buttons and key latching to send desktop combos without triggering client browser shortcuts:
+The Floating Action Hub features a dedicated **Linux Shortcuts & Modifiers** toolbar that transmits raw X11 keysyms directly through the encrypted RFB stream:
 
-* **Key Latches**: `Ctrl`, `Alt`, `Shift`, `Win` (latches key active on Linux desktop).
-* **Shortcuts**: `Esc`, `Tab`, `Alt+Tab` (Window Switcher), `Ctrl+Alt+T` (Open Terminal), `Super` (Open Start Menu).
+* **Sticky Key Latches**: `Ctrl`, `Alt`, `Shift`, `Win` (latches modifier down on the server so you can press single keys sequentially).
+* **Linux Dedicated Shortcuts**:
+  - `🪟 Start`: Opens application menu / dashboard launcher (`Super_L`).
+  - `🔀 Alt+Tab`: Cycles through active application windows (`Alt + Tab`).
+  - `💻 Terminal`: Launches default Linux terminal emulator (`Ctrl + Alt + T`).
+  - `🖥️ Desktop`: Minimizes all windows to reveal the desktop (`Super + D`).
+  - `⚡ Run`: Opens application run command dialog (`Alt + F2`).
+  - `❌ Close`: Closes currently focused window (`Alt + F4`).
+  - `📋 Term Paste`: Pastes clipboard text directly into terminal (`Ctrl + Shift + V`).
+  - `⌨️ CAD`: Sends system interrupt / task manager signal (`Ctrl + Alt + Del`).
 
 ---
 
 ### 10.7 Remote Session & Power Controls
 
-Admins can perform system-level actions directly from the **🔒 Power** menu:
-* **🔒 Lock Screen**: Locks the active desktop session.
+Interactive users (`admin` and `user`) can perform system-level session actions from the **🔒 Power** modal (with safety confirmation dialogs):
+* **🔒 Lock Screen**: Locks the active desktop session (`loginctl lock-sessions` / `dm-tool lock`).
 * **👥 Switch User**: Switches the active seat to the display manager login greeter without terminating running background user sessions (`dm-tool switch-to-greeter`).
-* **🚪 Log Out**: Logs out the current user session (`loginctl terminate-user`).
-* **🌙 Suspend**: Puts the host computer into system sleep/suspend.
-* **🔄 Reboot**: Reboots the Linux system (`systemctl reboot`).
-* **⏹ Power Off**: Safely shuts down the host machine (`systemctl poweroff`).
+* **🚪 Log Out**: Safely logs out the active user session (`loginctl terminate-user`).
+* **🌙 Sleep / Suspend**: Puts the host computer into system sleep/suspend (`systemctl suspend`).
+* **🔄 Reboot System**: Reboots the Linux system (`systemctl reboot`).
 
 ---
 
