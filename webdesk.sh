@@ -1539,9 +1539,9 @@ code=20
 '''
 
     if mode == '1':
-        sections = mirror_block + '\n' + xorg_block
+        sections = mirror_block
     else:
-        sections = xorg_block + '\n' + mirror_block
+        sections = xorg_block
 
     final_content = base_content.rstrip() + '\n\n' + sections + '\n'
 
@@ -1552,8 +1552,10 @@ except Exception as e:
 "
     if [ "$EUID" -eq 0 ]; then
         python3 -c "$cmd" 2>/dev/null || true
+        systemctl restart xrdp 2>/dev/null || true
     else
         sudo python3 -c "$cmd" 2>/dev/null || true
+        sudo systemctl restart xrdp 2>/dev/null || true
     fi
 
     RDP_MODE="${mode}"
