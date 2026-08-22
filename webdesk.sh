@@ -481,6 +481,9 @@ start_webdesk() {
         AUTH_FLAG="-auth guess"
     fi
 
+    mkdir -p "${INSTALL_DIR}"
+    touch "${LOG_FILE}"
+
     # Start x11vnc with fallback ladder
     # shellcheck disable=SC2086
     "${VNC_ROOT}/usr/bin/x11vnc" \
@@ -492,7 +495,7 @@ start_webdesk() {
         -rfbport "${VNC_PORT}" \
         ${VNC_TUNING} \
         ${PASS_OPT} \
-        -bg >/dev/null 2>&1 || {
+        -bg -o "${LOG_FILE}" >/dev/null 2>&1 || {
             "${VNC_ROOT}/usr/bin/x11vnc" \
                 -display "${DISPLAY_NUM}" \
                 -auth guess \
@@ -502,7 +505,7 @@ start_webdesk() {
                 -rfbport "${VNC_PORT}" \
                 ${VNC_TUNING} \
                 ${PASS_OPT} \
-                -bg >/dev/null 2>&1 || {
+                -bg -o "${LOG_FILE}" >/dev/null 2>&1 || {
                     "${VNC_ROOT}/usr/bin/x11vnc" \
                         -display :0 \
                         -auth guess \
@@ -512,7 +515,7 @@ start_webdesk() {
                         -rfbport "${VNC_PORT}" \
                         ${VNC_TUNING} \
                         ${PASS_OPT} \
-                        -bg >/dev/null 2>&1 || true
+                        -bg -o "${LOG_FILE}" >/dev/null 2>&1 || true
                 }
         }
 
@@ -522,16 +525,16 @@ start_webdesk() {
         --cert="${CERT_PEM}" \
         --web="${VNC_ROOT}/usr/share/novnc/" \
         "${WEB_PORT}" \
-        "127.0.0.1:${VNC_PORT}" >/dev/null 2>&1
+        "127.0.0.1:${VNC_PORT}" >> "${LOG_FILE}" 2>&1
 
     # Start WebDesk API daemon (Files, Keys, Power, Resolution)
     if [ -f "${INSTALL_DIR}/api_server.py" ]; then
-        python3 "${INSTALL_DIR}/api_server.py" -D >/dev/null 2>&1 || true
+        python3 "${INSTALL_DIR}/api_server.py" -D >> "${LOG_FILE}" 2>&1 || true
     fi
 
     # Start audio streaming daemon
     if [ -f "${INSTALL_DIR}/audio_server.py" ]; then
-        python3 "${INSTALL_DIR}/audio_server.py" -D >/dev/null 2>&1 || true
+        python3 "${INSTALL_DIR}/audio_server.py" -D >> "${LOG_FILE}" 2>&1 || true
     fi
 
     sleep 1.5
@@ -545,7 +548,12 @@ start_webdesk() {
         echo ""
     else
         echo -e "${RED}[!] Failed to start WebDesk backend.${NC}"
-        echo -e "${YELLOW}--> Tip: If connecting over SSH, make sure a local desktop display (:0) or login screen (LightDM/GDM) is active on the host machine.${NC}"
+        if [ -s "${LOG_FILE}" ]; then
+            echo -e "${YELLOW}--- Recent Error Logs (${LOG_FILE}) ---${NC}"
+            tail -n 15 "${LOG_FILE}" 2>/dev/null || true
+            echo -e "${YELLOW}--------------------------------------${NC}"
+        fi
+        echo -e "${YELLOW}--> Tip: If connecting over SSH or headless, ensure a desktop environment or display (:0) is active.${NC}"
         echo -e "${YELLOW}--> Run Option 6 or 'sudo webdesk install-service' to enable 24/7 background Login Screen streaming.${NC}\n"
         exit 1
     fi
