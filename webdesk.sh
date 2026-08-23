@@ -388,6 +388,31 @@ user_auth.reset_master_password_to_rule()
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
     fi
 
+    # Environment Auto-Detection: Physical Monitor vs Headless / Virtual VPS
+    echo -e "${YELLOW}--> Detecting display environment (Physical Screen vs Headless/Cloud VPS)...${NC}"
+    local is_headless=true
+    local detected_disp_info
+    detected_disp_info=$(get_active_display_and_auth)
+    local detected_disp
+    detected_disp=$(echo "$detected_disp_info" | cut -d'|' -f1)
+
+    if [ -n "$detected_disp" ] && { [ -S "/tmp/.X11-unix/X${detected_disp#:}" ] || [ -r "/sys/class/tty/tty0/active" ]; }; then
+        # Real X11 display socket or active physical console detected
+        is_headless=false
+    fi
+
+    if [ "$is_headless" = "false" ]; then
+        echo -e "${GREEN}✔ Physical / Desktop Display detected (${detected_disp:-:0}). Defaulting to Mode 1 (Live Screen Mirror).${NC}"
+        RDP_MODE="1"
+    else
+        echo -e "${CYAN}✔ Headless / Cloud VPS / Virtual environment detected. Defaulting to Mode 2 (Dedicated Virtual Desktop).${NC}"
+        RDP_MODE="2"
+    fi
+    save_config_var "RDP_MODE" "${RDP_MODE}"
+    if [ -f /etc/xrdp/xrdp.ini ]; then
+        apply_rdp_config "${RDP_MODE}" "${RDP_PORT}"
+    fi
+
     # Automatically install and enable 24/7 background system service
     if ! is_service_installed; then
         echo -e "${YELLOW}--> Setting up 24/7 background streaming service...${NC}"
