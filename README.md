@@ -329,23 +329,23 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 ### 🔀 The 3 RDP Session Modes
 
 WebDesk features **Automated Environment Detection & Interactive Setup** on install:
-* **Mode 1 — Physical Monitor Setup (`:0`)**: Best for desktop PCs / laptops with a physical screen. Web and RDP mirror the exact physical display.
-* **Mode 2 — Multiple Concurrent Sessions (Virtual Desktop)**: Best for Cloud VPS, Headless servers, or running multiple isolated sessions simultaneously.
-* **Mode 3 — Single Session Multiple Users (Workstation Collaboration)**: Allows secondary Linux users to connect simultaneously with isolated input.
+* **Mode 1 — Live Screen Mirror & Multi-User Collaboration (`:0`)**: All users share and see the exact same desktop simultaneously in real-time. (Ideal for physical screen mirroring, joint collaboration, or co-working with tools like RustDesk/NoMachine).
+* **Mode 2 — Private Dedicated Virtual Desktop**: Launches an independent, high-speed virtual X11 desktop for your account without touching or disturbing the main screen. (Ideal for private RDP sessions on Cloud VPS or headless servers).
+* **Mode 3 — Independent Multi-User Workstation**: Allows multiple distinct Linux accounts to work concurrently on the same machine with independent desktops and zero input/mouse conflicts.
 
 | Mode | Name | Description & Best Use Case |
 | :--- | :--- | :--- |
-| **Mode 1** | **🪞 Physical Monitor Setup (`:0`)** | Connects Windows directly to the active physical screen / WebDesk web client (`127.0.0.1:5900`). You see and control the exact live physical display. *(Requires physical monitor or `webdesk install-service`)*. |
-| **Mode 2** | **🖥️ Multiple Concurrent Sessions** | Opens an independent virtual X11 desktop for your Linux user account (`remotelinuxuser`). *(Recommended for Cloud VPS, Headless Servers, or when no monitor is attached)*. |
-| **Mode 3** | **👥 Single Session Multiple Users** | Allows a secondary Linux user (e.g. `remoteuser`) to work simultaneously without sharing the mouse with the local user. |
+| **Mode 1** | **🪞 Live Screen Mirror & Collaboration (`:0`)** | Connects Windows directly to the active screen / WebDesk web client (`127.0.0.1:5900`). Everyone shares and controls the same screen simultaneously. |
+| **Mode 2** | **🖥️ Private Dedicated Virtual Desktop** | Opens a private, independent virtual X11 desktop for your Linux user account (`remotelinuxuser`). Runs isolated in the background. |
+| **Mode 3** | **👥 Independent Multi-User Workstation** | Allows multiple distinct Linux accounts (e.g. `remoteuser`) to log in and work simultaneously on separate virtual desktops without mouse conflicts. |
 
 <details>
 <summary><b>🪟 View Windows Connection Walkthrough, Security Model & Management Commands</b></summary>
 
 #### 💡 Summary of Session Modes:
-* **Physical Monitor Setup (Mode 1)**: `webdesk rdp-mode 1` — Mirrors the physical screen.
-* **Multiple Concurrent Sessions (Mode 2)**: `webdesk rdp-mode 2` — Independent dedicated virtual desktop.
-* **Single Session Multiple Users (Mode 3)**: `webdesk rdp-mode 3` — Multi-user collaboration.
+* **Shared Screen & Collaboration (Mode 1)**: `webdesk rdp-mode 1` — All users see and share the exact same screen.
+* **Private Virtual Desktop (Mode 2)**: `webdesk rdp-mode 2` — Dedicated private virtual desktop session.
+* **Independent Multi-User Workstation (Mode 3)**: `webdesk rdp-mode 3` — Multi-user simultaneous independent workspaces.
 
 #### 🔒 Security & PAM System Authentication
 * **Strict Linux PAM Verification**: All RDP modes (including Live Mirror) authenticate directly against the central Linux PAM security stack (`/etc/pam.d/xrdp-sesman`). Incorrect passwords immediately trigger `Login failed` and block access.
