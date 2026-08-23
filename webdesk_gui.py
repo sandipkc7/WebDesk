@@ -84,6 +84,7 @@ window {
     color: #f1f5f9;
 }
 
+/* Sidebar Styling */
 .sidebar-box {
     background-color: #0b1120;
     border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -96,9 +97,12 @@ window {
 
 .sidebar-list {
     background: transparent;
+    border: none;
 }
 
 .sidebar-list row {
+    background: transparent;
+    border: none;
     padding: 9px 14px;
     border-radius: 6px;
     margin: 2px 8px;
@@ -109,7 +113,7 @@ window {
 }
 
 .sidebar-list row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(255, 255, 255, 0.06);
     color: #f8fafc;
 }
 
@@ -118,17 +122,22 @@ window {
     color: #ffffff;
 }
 
+/* Content Container & Panels */
 .content-pane {
     background-color: #0f172a;
     padding: 14px 18px;
 }
 
+viewport, scrolledwindow {
+    background-color: transparent;
+}
+
 .card-panel {
     background-color: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
 }
 
 .card-header-lbl {
@@ -138,89 +147,137 @@ window {
     letter-spacing: 0.5px;
 }
 
+/* Badges */
 .badge-running {
-    background-color: rgba(34, 197, 94, 0.2);
+    background-color: rgba(34, 197, 94, 0.22);
     color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.35);
+    border: 1px solid rgba(34, 197, 94, 0.45);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-weight: bold;
     font-size: 10px;
 }
 
 .badge-stopped {
-    background-color: rgba(239, 68, 68, 0.2);
+    background-color: rgba(239, 68, 68, 0.22);
     color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.35);
+    border: 1px solid rgba(239, 68, 68, 0.45);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-weight: bold;
     font-size: 10px;
 }
 
 .badge-info {
-    background-color: rgba(56, 189, 248, 0.15);
+    background-color: rgba(56, 189, 248, 0.18);
     color: #38bdf8;
-    border: 1px solid rgba(56, 189, 248, 0.3);
+    border: 1px solid rgba(56, 189, 248, 0.4);
     border-radius: 4px;
-    padding: 2px 6px;
+    padding: 3px 6px;
     font-weight: bold;
     font-size: 10px;
 }
 
+/* Base Buttons */
 button {
-    border-radius: 5px;
+    background-color: #334155;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    color: #f8fafc;
     font-size: 11px;
     font-weight: 600;
     padding: 5px 12px;
-    min-height: 26px;
+    min-height: 28px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: all 120ms ease;
 }
 
+button:hover {
+    background-color: #475569;
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+
+button:active {
+    background-color: #1e293b;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Primary Action Button (Blue) */
 .btn-primary {
     background-color: #0284c7;
+    border: 1px solid #38bdf8;
     color: #ffffff;
-    border: none;
+    font-weight: bold;
 }
 
 .btn-primary:hover {
     background-color: #0369a1;
+    border-color: #7dd3fc;
+    color: #ffffff;
 }
 
+.btn-primary:active {
+    background-color: #075985;
+}
+
+/* Danger / Stop Button (Red) */
 .btn-danger {
-    background-color: rgba(239, 68, 68, 0.18);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.35);
+    background-color: #b91c1c;
+    border: 1px solid #f87171;
+    color: #ffffff;
+    font-weight: bold;
 }
 
 .btn-danger:hover {
     background-color: #dc2626;
+    border-color: #fca5a5;
     color: #ffffff;
 }
 
+.btn-danger:active {
+    background-color: #991b1b;
+}
+
+/* Secondary Button (Neutral Slate) */
 .btn-secondary {
-    background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #f1f5f9;
+    background-color: #334155;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f8fafc;
 }
 
 .btn-secondary:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: #475569;
+    border-color: rgba(255, 255, 255, 0.28);
+    color: #ffffff;
 }
 
+.btn-secondary:active {
+    background-color: #1e293b;
+}
+
+/* Success / Activate Button (Green) */
 .btn-success {
-    background-color: rgba(34, 197, 94, 0.18);
-    color: #4ade80;
-    border: 1px solid rgba(34, 197, 94, 0.35);
+    background-color: #15803d;
+    border: 1px solid #4ade80;
+    color: #ffffff;
+    font-weight: bold;
 }
 
 .btn-success:hover {
     background-color: #16a34a;
+    border-color: #86efac;
     color: #ffffff;
 }
 
+.btn-success:active {
+    background-color: #14532d;
+}
+
+/* URL and Info Box */
 .url-box {
     background-color: #0b1120;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
     padding: 6px 12px;
     margin: 3px 0;
@@ -233,32 +290,164 @@ button {
     font-weight: bold;
 }
 
-combobox, entry {
+/* ListBox & Tables (Web Users & Navigation) */
+list, listbox, .users-list-box {
     background-color: #0b1120;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 5px;
-    color: #f8fafc;
-    font-size: 11px;
-    padding: 3px 8px;
-    min-height: 26px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #f1f5f9;
 }
 
-combobox button {
+.users-list-box row {
+    background-color: #161f30;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    margin: 3px 6px;
+    padding: 6px 10px;
+    color: #f1f5f9;
+}
+
+.users-list-box row:hover {
+    background-color: #1e293b;
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Dropdown ComboBox & Popup Menus */
+combobox {
+    background-color: #161f30;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 6px;
+    color: #f8fafc;
+    font-size: 11.5px;
+    padding: 3px 8px;
+    min-height: 28px;
+}
+
+combobox:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+combobox:focus {
+    border-color: #38bdf8;
+}
+
+combobox button, combobox button.combo {
     background: transparent;
     border: none;
+    box-shadow: none;
     color: #f8fafc;
 }
 
-combobox cellview {
+combobox cellview, combobox cellview label {
     color: #f8fafc;
+    background-color: transparent;
+}
+
+combobox window.popup, window.popup {
+    background-color: #161f30;
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+}
+
+menu, .menu, window.popup menu {
+    background-color: #161f30;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 4px;
+    color: #f8fafc;
+}
+
+menu menuitem, .menu menuitem, window.popup menu menuitem {
+    background-color: transparent;
+    color: #f8fafc;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11.5px;
+}
+
+menu menuitem:hover, .menu menuitem:hover, window.popup menu menuitem:hover {
+    background-color: #0284c7;
+    color: #ffffff;
+}
+
+menu menuitem label, .menu menuitem label, window.popup menu menuitem label {
+    color: #f8fafc;
+}
+
+menu menuitem:hover label, .menu menuitem:hover label, window.popup menu menuitem:hover label {
+    color: #ffffff;
+}
+
+/* Text Inputs */
+entry {
+    background-color: #0b1120;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 11.5px;
+    padding: 4px 8px;
+    min-height: 28px;
+}
+
+entry:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px #38bdf8;
+}
+
+/* Textview (Logs & Audit) */
+textview {
+    background-color: #0b1120;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
 }
 
 textview text {
     background-color: #0b1120;
-    color: #94a3b8;
+    color: #cbd5e1;
     font-family: monospace;
     font-size: 10.5px;
     padding: 6px;
+}
+
+/* Radio & Checkboxes */
+radiobutton, checkbutton {
+    color: #f1f5f9;
+}
+
+radiobutton label, checkbutton label {
+    color: #f1f5f9;
+    font-size: 11.5px;
+}
+
+/* Switch */
+switch {
+    background-color: #334155;
+    border-radius: 12px;
+}
+
+switch:checked {
+    background-color: #0284c7;
+}
+
+switch slider {
+    background-color: #ffffff;
+    border-radius: 12px;
+}
+
+/* Dialogs */
+dialog, messagedialog, window.dialog {
+    background-color: #0f172a;
+    color: #f1f5f9;
+}
+
+dialog box, messagedialog box {
+    background-color: transparent;
+    color: #f1f5f9;
+}
+
+dialog label, messagedialog label {
+    color: #f1f5f9;
 }
 """
 
@@ -280,9 +469,12 @@ window {
 
 .sidebar-list {
     background: transparent;
+    border: none;
 }
 
 .sidebar-list row {
+    background: transparent;
+    border: none;
     padding: 9px 14px;
     border-radius: 6px;
     margin: 2px 8px;
@@ -307,12 +499,17 @@ window {
     padding: 14px 18px;
 }
 
+viewport, scrolledwindow {
+    background-color: transparent;
+}
+
 .card-panel {
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .card-header-lbl {
@@ -327,7 +524,7 @@ window {
     color: #16a34a;
     border: 1px solid rgba(34, 197, 94, 0.35);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-weight: bold;
     font-size: 10px;
 }
@@ -337,7 +534,7 @@ window {
     color: #dc2626;
     border: 1px solid rgba(239, 68, 68, 0.35);
     border-radius: 4px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-weight: bold;
     font-size: 10px;
 }
@@ -347,37 +544,70 @@ window {
     color: #0284c7;
     border: 1px solid rgba(2, 132, 199, 0.25);
     border-radius: 4px;
-    padding: 2px 6px;
+    padding: 3px 6px;
     font-weight: bold;
     font-size: 10px;
 }
 
+list, listbox, .users-list-box {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #0f172a;
+}
+
+.users-list-box row {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 3px 6px;
+    color: #0f172a;
+}
+
+.users-list-box row:hover {
+    background-color: #f1f5f9;
+    color: #0f172a;
+}
+
 button {
-    border-radius: 5px;
+    background-color: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    color: #1e293b;
     font-size: 11px;
     font-weight: 600;
     padding: 5px 12px;
-    min-height: 26px;
+    min-height: 28px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+button:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
 }
 
 .btn-primary {
     background-color: #0284c7;
+    border: 1px solid #0369a1;
     color: #ffffff;
-    border: none;
+    font-weight: bold;
 }
 
 .btn-primary:hover {
     background-color: #0369a1;
+    color: #ffffff;
 }
 
 .btn-danger {
-    background-color: #fee2e2;
-    color: #dc2626;
-    border: 1px solid #fca5a5;
+    background-color: #dc2626;
+    border: 1px solid #b91c1c;
+    color: #ffffff;
+    font-weight: bold;
 }
 
 .btn-danger:hover {
-    background-color: #dc2626;
+    background-color: #b91c1c;
     color: #ffffff;
 }
 
@@ -392,13 +622,14 @@ button {
 }
 
 .btn-success {
-    background-color: #dcfce7;
-    color: #16a34a;
-    border: 1px solid #86efac;
+    background-color: #16a34a;
+    border: 1px solid #15803d;
+    color: #ffffff;
+    font-weight: bold;
 }
 
 .btn-success:hover {
-    background-color: #16a34a;
+    background-color: #15803d;
     color: #ffffff;
 }
 
@@ -417,24 +648,64 @@ button {
     font-weight: bold;
 }
 
-combobox, entry {
+combobox {
     background-color: #ffffff;
     border: 1px solid #cbd5e1;
-    border-radius: 5px;
+    border-radius: 6px;
     color: #0f172a;
-    font-size: 11px;
+    font-size: 11.5px;
     padding: 3px 8px;
-    min-height: 26px;
+    min-height: 28px;
 }
 
-combobox button {
+combobox button, combobox button.combo {
     background: transparent;
     border: none;
     color: #0f172a;
 }
 
-combobox cellview {
+combobox cellview, combobox cellview label {
     color: #0f172a;
+    background-color: transparent;
+}
+
+menu, .menu, window.popup menu {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 4px;
+    color: #0f172a;
+}
+
+menu menuitem, .menu menuitem, window.popup menu menuitem {
+    background-color: transparent;
+    color: #0f172a;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11.5px;
+}
+
+menu menuitem:hover, .menu menuitem:hover, window.popup menu menuitem:hover {
+    background-color: #0284c7;
+    color: #ffffff;
+}
+
+menu menuitem label, .menu menuitem label, window.popup menu menuitem label {
+    color: #0f172a;
+}
+
+menu menuitem:hover label, .menu menuitem:hover label, window.popup menu menuitem:hover label {
+    color: #ffffff;
+}
+
+entry {
+    background-color: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    color: #0f172a;
+    font-size: 11.5px;
+    padding: 4px 8px;
+    min-height: 28px;
 }
 
 textview text {
@@ -593,7 +864,6 @@ class WebDeskApp(Gtk.Window):
         return ips or ["127.0.0.1"]
 
     def build_ui(self):
-        # Main Split Horizontal Box (Sidebar on Left, Stack Container on Right)
         root_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.add(root_box)
 
@@ -651,7 +921,7 @@ class WebDeskApp(Gtk.Window):
         sidebar_scroll.add(self.nav_list)
         sidebar_box.pack_start(sidebar_scroll, True, True, 4)
 
-        # Sidebar Footer: Theme Switcher & Port Overview
+        # Sidebar Footer: Theme Switcher
         sidebar_footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         sidebar_footer.set_margin_start(10)
         sidebar_footer.set_margin_end(10)
@@ -993,6 +1263,7 @@ class WebDeskApp(Gtk.Window):
         card_u.pack_start(top_u, False, False, 0)
 
         self.users_list_box = Gtk.ListBox()
+        self.users_list_box.get_style_context().add_class("users-list-box")
         self.users_list_box.set_selection_mode(Gtk.SelectionMode.NONE)
 
         scroll_u = Gtk.ScrolledWindow()
@@ -1074,10 +1345,10 @@ class WebDeskApp(Gtk.Window):
 
                 role_str = u.get("role", "user").upper()
                 is_susp = u.get("status") == "suspended"
-                status_lbl = "<span color='#f87171'>[ Suspended ]</span>" if is_susp else "<span color='#4ade80'>[ Active ]</span>"
+                status_lbl = "<span color='#f87171'><b>[ Suspended ]</b></span>" if is_susp else "<span color='#4ade80'><b>[ Active ]</b></span>"
 
                 info_lbl = Gtk.Label(xalign=0)
-                info_lbl.set_markup(f"<b>{u['username']}</b> <small>({role_str}) {status_lbl}</small>")
+                info_lbl.set_markup(f"<b><span color='#38bdf8'>{u['username']}</span></b> <span size='small' color='#94a3b8'>({role_str})</span> {status_lbl}")
                 hbox.pack_start(info_lbl, True, True, 0)
 
                 btn_pw = Gtk.Button(label="Password")
