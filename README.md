@@ -329,21 +329,21 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 ### 🔀 The 3 RDP Session Modes
 
 WebDesk features **Automated Environment Detection & Interactive Setup** on install:
-* **Mode 1 — Live Screen Mirror & Multi-User Collaboration (`:0`)**: All users share and see the exact same desktop simultaneously in real-time. (Ideal for physical screen mirroring, joint collaboration, or co-working with tools like RustDesk/NoMachine).
+* **Mode 1 — Live Screen Mirror & Multi-User Collaboration (`:0`)**: All users share, view, and interact with the exact same desktop simultaneously in real-time. **Fully supports both Headless Cloud VPS (via automated `Xvfb` virtual display) and Physical Monitor PCs**. Also shares screen seamlessly with RustDesk/NoMachine users.
 * **Mode 2 — Private Dedicated Virtual Desktop**: Launches an independent, high-speed virtual X11 desktop for your account without touching or disturbing the main screen. (Ideal for private RDP sessions on Cloud VPS or headless servers).
 * **Mode 3 — Independent Multi-User Workstation**: Allows multiple distinct Linux accounts to work concurrently on the same machine with independent desktops and zero input/mouse conflicts.
 
-| Mode | Name | Description & Best Use Case |
-| :--- | :--- | :--- |
-| **Mode 1** | **🪞 Live Screen Mirror & Collaboration (`:0`)** | Connects Windows directly to the active screen / WebDesk web client (`127.0.0.1:5900`). Everyone shares and controls the same screen simultaneously. |
-| **Mode 2** | **🖥️ Private Dedicated Virtual Desktop** | Opens a private, independent virtual X11 desktop for your Linux user account (`remotelinuxuser`). Runs isolated in the background. |
-| **Mode 3** | **👥 Independent Multi-User Workstation** | Allows multiple distinct Linux accounts (e.g. `remoteuser`) to log in and work simultaneously on separate virtual desktops without mouse conflicts. |
+| Mode | Name | Description & Best Use Case | Headless VPS Support | Physical Screen Support |
+| :--- | :--- | :--- | :---: | :---: |
+| **Mode 1** | **🪞 Live Shared Screen & Collaboration (`:0`)** | Connects all Web & RDP clients to the exact same screen simultaneously for live teamwork & co-working. | ✔️ Supported *(via `Xvfb`)* | ✔️ Supported *(Native `:0`)* |
+| **Mode 2** | **🖥️ Private Dedicated Virtual Desktop** | Opens a private, independent virtual X11 desktop for your Linux user account (`remotelinuxuser`). | ✔️ Supported | ✔️ Supported |
+| **Mode 3** | **👥 Independent Multi-User Workstation** | Allows multiple distinct Linux accounts (e.g. `remoteuser`) to work simultaneously on separate desktops. | ✔️ Supported | ✔️ Supported |
 
 <details>
 <summary><b>🪟 View Windows Connection Walkthrough, Security Model & Management Commands</b></summary>
 
 #### 💡 Summary of Session Modes:
-* **Shared Screen & Collaboration (Mode 1)**: `webdesk rdp-mode 1` — All users see and share the exact same screen.
+* **Shared Screen & Collaboration (Mode 1)**: `webdesk rdp-mode 1` — All users see, share, and collaborate on the exact same screen across Web & RDP (Supported on both Headless Cloud VPS and Physical Monitor PCs).
 * **Private Virtual Desktop (Mode 2)**: `webdesk rdp-mode 2` — Dedicated private virtual desktop session.
 * **Independent Multi-User Workstation (Mode 3)**: `webdesk rdp-mode 3` — Multi-user simultaneous independent workspaces.
 
