@@ -161,19 +161,19 @@ except Exception:
 get_profile_flags() {
     case "${PROFILE}" in
         ultra_fast)
-            VNC_TUNING="-wait 5 -defer 5 -noxdamage -nowf -repeat -nodpms -xkb"
+            VNC_TUNING="-wait 5 -defer 5 -noxdamage -nowf -repeat -nodpms -xkb -noshm"
             PROFILE_DESC="Ultra Fast (60 FPS / Low Latency)"
             ;;
         high_quality)
-            VNC_TUNING="-wait 15 -defer 15 -noxdamage -repeat -nodpms -xkb"
+            VNC_TUNING="-wait 15 -defer 15 -noxdamage -repeat -nodpms -xkb -noshm"
             PROFILE_DESC="High Quality (Crisp Text & Colors)"
             ;;
         low_bandwidth)
-            VNC_TUNING="-wait 35 -defer 35 -wireframe -repeat -nodpms -xkb"
+            VNC_TUNING="-wait 35 -defer 35 -wireframe -repeat -nodpms -xkb -noshm"
             PROFILE_DESC="Low Bandwidth (Eco / Slow Wi-Fi)"
             ;;
         balanced|*)
-            VNC_TUNING="-wait 10 -defer 10 -noxdamage -repeat -nodpms -xkb"
+            VNC_TUNING="-wait 10 -defer 10 -noxdamage -repeat -nodpms -xkb -noshm"
             PROFILE_DESC="Balanced (Recommended / 30-45 FPS)"
             ;;
     esac
