@@ -890,13 +890,24 @@ run_system_service() {
         fi
 
         # Headless Cloud VPS fallback: if no active physical display socket exists, spawn Xvfb virtual frame buffer
-        if [ ! -S "/tmp/.X11-unix/X${ACTIVE_DISP#:}" ] && command -v Xvfb >/dev/null 2>&1; then
-            if ! pgrep -f "Xvfb ${ACTIVE_DISP}" >/dev/null 2>&1; then
-                log_msg "Headless environment detected. Spawning virtual frame buffer Xvfb on ${ACTIVE_DISP}..."
-                Xvfb "${ACTIVE_DISP}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
-                sleep 1
+        if [ ! -S "/tmp/.X11-unix/X${ACTIVE_DISP#:}" ]; then
+            local xvfb_cmd
+            xvfb_cmd="$(command -v Xvfb 2>/dev/null || echo "${VNC_ROOT}/usr/bin/Xvfb")"
+            if [ -x "$xvfb_cmd" ] || command -v Xvfb >/dev/null 2>&1; then
+                if ! pgrep -f "Xvfb.*${ACTIVE_DISP}" >/dev/null 2>&1; then
+                    log_msg "Headless environment detected. Spawning virtual frame buffer Xvfb on ${ACTIVE_DISP}..."
+                    ${xvfb_cmd} "${ACTIVE_DISP}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
+                    sleep 1.5
+                fi
+                AUTH_FLAG=""
+            elif command -v apt-get >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
+                apt-get update -qq && apt-get install -y xvfb >/dev/null 2>&1 || true
+                if command -v Xvfb >/dev/null 2>&1; then
+                    Xvfb "${ACTIVE_DISP}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
+                    sleep 1.5
+                    AUTH_FLAG=""
+                fi
             fi
-            AUTH_FLAG=""
         fi
 
         log_msg "Spawning x11vnc backend for display ${ACTIVE_DISP}..."
