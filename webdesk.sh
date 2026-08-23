@@ -120,7 +120,7 @@ ensure_runtime_files() {
         elif [ -f "${SCRIPT_DIR}/vnc.html" ]; then
             cp -f "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
             cp -f "${SCRIPT_DIR}/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
-        elif [ ! -f "${VNC_ROOT}/usr/share/novnc/vnc.html" ] || ! grep -q "webdesk_hub" "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null; then
+        else
             curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/vnc.html" -o "${VNC_ROOT}/usr/share/novnc/vnc.html" 2>/dev/null || true
             cp -f "${VNC_ROOT}/usr/share/novnc/vnc.html" "${VNC_ROOT}/usr/share/novnc/index.html" 2>/dev/null || true
         fi
@@ -869,6 +869,16 @@ run_system_service() {
         else
             AUTH_FLAG="-auth guess"
             log_msg "Target Display: ${ACTIVE_DISP} (Using -auth guess)"
+        fi
+
+        # Headless Cloud VPS fallback: if no active physical display socket exists, spawn Xvfb virtual frame buffer
+        if [ ! -S "/tmp/.X11-unix/X${ACTIVE_DISP#:}" ] && command -v Xvfb >/dev/null 2>&1; then
+            if ! pgrep -f "Xvfb ${ACTIVE_DISP}" >/dev/null 2>&1; then
+                log_msg "Headless environment detected. Spawning virtual frame buffer Xvfb on ${ACTIVE_DISP}..."
+                Xvfb "${ACTIVE_DISP}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
+                sleep 1
+            fi
+            AUTH_FLAG=""
         fi
 
         log_msg "Spawning x11vnc backend for display ${ACTIVE_DISP}..."
