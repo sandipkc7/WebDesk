@@ -142,6 +142,13 @@ ensure_runtime_files() {
         else
             curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/app/styles/webdesk.css" -o "${VNC_ROOT}/usr/share/novnc/app/styles/webdesk.css" 2>/dev/null || true
         fi
+
+        # ui.js
+        if [ -f "${SCRIPT_DIR}/src/web/app/ui.js" ]; then
+            cp -f "${SCRIPT_DIR}/src/web/app/ui.js" "${VNC_ROOT}/usr/share/novnc/app/ui.js" 2>/dev/null || true
+        elif [ -f "${SCRIPT_DIR}/app/ui.js" ]; then
+            cp -f "${SCRIPT_DIR}/app/ui.js" "${VNC_ROOT}/usr/share/novnc/app/ui.js" 2>/dev/null || true
+        fi
     fi
 
     export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}/src:${SCRIPT_DIR}:${PYTHONPATH}"
@@ -764,41 +771,68 @@ get_active_display_and_auth() {
     local active_auth=""
     local active_vt=""
 
-    # 1. First priority: Inspect real running Xorg / X11 server process
-    local xorg_match=""
-    xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] |Xwayland' | grep -v 'grep' | head -n 1 || true)
-    if [ -n "$xorg_match" ]; then
-        active_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo "")
-        active_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
+    # 1. First priority: Inspect logged-in user desktop session process (MATE, GNOME, XFCE, Cinnamon, KDE, LXDE, etc.)
+    for proc_name in mate-session gnome-session-binary gnome-session xfce4-session cinnamon-session startplasma-x11 plasmashell lxsession x-session-manager; do
+        local sess_pid
+        sess_pid=$(pgrep -u "${REAL_USER}" -x "$proc_name" 2>/dev/null | head -n 1 || pgrep -x "$proc_name" 2>/dev/null | head -n 1 || true)
+        if [ -n "$sess_pid" ] && [ -d "/proc/${sess_pid}" ]; then
+            local p_disp p_auth
+            p_disp=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
+            p_auth=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^XAUTHORITY=' | cut -d= -f2- | head -n 1 || true)
+            if [ -n "$p_disp" ] && [[ ! "$p_disp" =~ ^(localhost)?:?([1-9][0-9]+)\.? ]]; then
+                active_disp="$p_disp"
+                [ -n "$p_auth" ] && [ -r "$p_auth" ] && active_auth="$p_auth"
+                break
+            fi
+        fi
+    done
+
+    # 2. Second priority: Inspect real running Xorg / X11 server process (ignoring high SSH forwarding displays)
+    if [ -z "$active_disp" ]; then
+        local xorg_match=""
+        xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | grep -v 'Xvfb' | head -n 1 || true)
+        if [ -n "$xorg_match" ]; then
+            local cand_disp cand_auth
+            cand_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo "")
+            cand_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
+            if [ -n "$cand_disp" ] && [[ ! "$cand_disp" =~ ^:([1-9][0-9]+)$ ]]; then
+                active_disp="$cand_disp"
+                [ -n "$cand_auth" ] && active_auth="$cand_auth"
+            fi
+        fi
     fi
 
-    # 2. Check active console VT (e.g. tty7, tty8) from sysfs
+    # 3. Check active console VT (e.g. tty7, tty8) from sysfs
     if [ -z "$active_disp" ] && [ -r "/sys/class/tty/tty0/active" ]; then
         active_vt=$(cat /sys/class/tty/tty0/active 2>/dev/null || true)
         if [ -n "$active_vt" ]; then
             local vt_match
             vt_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | grep "$active_vt" | head -n 1 || true)
             if [ -n "$vt_match" ]; then
-                active_disp=$(echo "$vt_match" | grep -oP ':\d+' | head -n 1 || echo "")
-                active_auth=$(echo "$vt_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
+                local cand_disp
+                cand_disp=$(echo "$vt_match" | grep -oP ':\d+' | head -n 1 || echo "")
+                if [ -n "$cand_disp" ] && [[ ! "$cand_disp" =~ ^:([1-9][0-9]+)$ ]]; then
+                    active_disp="$cand_disp"
+                    active_auth=$(echo "$vt_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
+                fi
             fi
         fi
     fi
 
-    # 3. Check systemd-logind active session on seat0 (ignoring SSH remote displays)
+    # 4. Check systemd-logind active session on seat0 (ignoring SSH remote displays)
     if [ -z "$active_disp" ] && command -v loginctl >/dev/null 2>&1; then
         local active_session
         active_session=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
         if [ -n "$active_session" ]; then
             local sess_disp
             sess_disp=$(loginctl show-session "$active_session" -p Display --value 2>/dev/null || true)
-            if [ -n "$sess_disp" ] && [[ ! "$sess_disp" =~ ^(localhost)?:?[1-9][0-9]+\.? ]]; then
+            if [ -n "$sess_disp" ] && [[ ! "$sess_disp" =~ ^(localhost)?:?([1-9][0-9]+)\.? ]]; then
                 active_disp="$sess_disp"
             fi
         fi
     fi
 
-    # 4. Check for active X11 unix domain socket
+    # 5. Check for active X11 unix domain socket (ignoring displays >= 10)
     if [ -z "$active_disp" ]; then
         if [ -S "/tmp/.X11-unix/X0" ]; then
             active_disp=":0"
@@ -809,16 +843,16 @@ get_active_display_and_auth() {
         fi
     fi
 
-    # 5. Locate auth file
+    # 6. Locate auth file
     if [ -z "$active_auth" ] || [ ! -r "$active_auth" ]; then
-        if [ -r "/var/run/lightdm/root/${active_disp}" ]; then
+        if [ -r "${USER_HOME}/.Xauthority" ]; then
+            active_auth="${USER_HOME}/.Xauthority"
+        elif [ -r "/var/run/lightdm/root/${active_disp}" ]; then
             active_auth="/var/run/lightdm/root/${active_disp}"
         elif [ -r "/run/lightdm/root/${active_disp}" ]; then
             active_auth="/run/lightdm/root/${active_disp}"
         elif [ -r "/run/lightdm/${REAL_USER}/xauthority" ]; then
             active_auth="/run/lightdm/${REAL_USER}/xauthority"
-        elif [ -r "${USER_HOME}/.Xauthority" ]; then
-            active_auth="${USER_HOME}/.Xauthority"
         elif [ -r "${HOME}/.Xauthority" ]; then
             active_auth="${HOME}/.Xauthority"
         fi

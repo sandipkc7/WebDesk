@@ -69,36 +69,25 @@
 
         if (!webdeskToken) {
             window.location.replace('login.html');
-        } else {
-            // Enhanced Client Diagnostics & Error Logger
-            window.addEventListener('error', function(event) {
-                console.error('[WebDesk Client Error]', event.error || event.message);
-                try {
-                    if (window.apiFetch) {
-                        window.apiFetch('/api/log', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                level: 'ERROR',
-                                message: (event.error && event.error.stack) || event.message || 'Client Exception',
-                                url: window.location.href,
-                                userAgent: navigator.userAgent
-                            })
-                        }).catch(function(){});
-                    }
-                } catch(e) {}
-            });
-
-            var errScript = document.createElement('script');
-            errScript.src = 'app/error-handler.js';
-            document.head.appendChild(errScript);
-
-            var uiScript = document.createElement('script');
-            uiScript.type = 'module';
-            uiScript.crossOrigin = 'anonymous';
-            uiScript.src = 'app/ui.js';
-            document.head.appendChild(uiScript);
         }
+        // Enhanced Client Diagnostics & Error Logger
+        window.addEventListener('error', function(event) {
+            console.error('[WebDesk Client Error]', event.error || event.message);
+            try {
+                if (window.apiFetch) {
+                    window.apiFetch('/api/log', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            level: 'ERROR',
+                            message: (event.error && event.error.stack) || event.message || 'Client Exception',
+                            url: window.location.href,
+                            userAgent: navigator.userAgent
+                        })
+                    }).catch(function(){});
+                }
+            } catch(e) {}
+        });
     </script>
 </head>
 
@@ -2273,5 +2262,7 @@
             }, true);
         });
     </script>
+    <script src="app/error-handler.js"></script>
+    <script type="module" crossorigin="anonymous" src="app/ui.js"></script>
  </body>
 </html>
