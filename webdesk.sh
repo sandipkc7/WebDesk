@@ -213,7 +213,7 @@ install_webdesk() {
     echo -e "${YELLOW}--> Downloading packages (no root/sudo required)...${NC}"
     local APT_CMD
     APT_CMD="$(command -v apt-get 2>/dev/null || echo "/usr/bin/apt-get")"
-    for pkg in x11vnc novnc websockify python3-websockify xdotool xclip libvncserver1 libvncserver1t64 libvncclient1 libvncclient1t64 libxdo3 libxmu6; do
+    for pkg in x11vnc novnc websockify python3-websockify xvfb xdotool xclip libvncserver1 libvncserver1t64 libvncclient1 libvncclient1t64 libxdo3 libxmu6; do
         ${APT_CMD} download "$pkg" >/dev/null 2>&1 || true
     done
 
@@ -649,11 +649,25 @@ start_webdesk() {
         DISPLAY_NUM=":0"
     fi
 
-    AUTH_FLAG=""
-    if [ -n "$DETECTED_AUTH" ] && [ -r "$DETECTED_AUTH" ]; then
-        AUTH_FLAG="-auth ${DETECTED_AUTH}"
-    else
-        AUTH_FLAG="-auth guess"
+    # Headless Cloud VPS fallback: if no active physical display socket exists, spawn Xvfb virtual frame buffer
+    if [ ! -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ]; then
+        local xvfb_bin
+        xvfb_bin="$(command -v Xvfb 2>/dev/null || echo "${VNC_ROOT}/usr/bin/Xvfb")"
+        if [ -x "$xvfb_bin" ]; then
+            if ! pgrep -f "Xvfb ${DISPLAY_NUM}" >/dev/null 2>&1; then
+                echo -e "${YELLOW}--> Headless environment detected: Spawning virtual frame buffer (${DISPLAY_NUM})...${NC}"
+                "$xvfb_bin" "${DISPLAY_NUM}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
+                sleep 1
+            fi
+            AUTH_FLAG=""
+        elif command -v apt-get >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
+            apt-get update -qq && apt-get install -y xvfb >/dev/null 2>&1 || true
+            if command -v Xvfb >/dev/null 2>&1; then
+                Xvfb "${DISPLAY_NUM}" -screen 0 1920x1080x24 -ac +extension GLX +render -noreset >> "${LOG_FILE}" 2>&1 &
+                sleep 1
+                AUTH_FLAG=""
+            fi
+        fi
     fi
 
     mkdir -p "${INSTALL_DIR}"
