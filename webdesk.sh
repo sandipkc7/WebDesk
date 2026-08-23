@@ -573,7 +573,34 @@ user_auth.reset_master_password_to_rule()
     fi
 
     echo -e "${GREEN}${BOLD}✔ [WebDesk] Installation completed successfully!${NC}\n"
-    echo -e "WebDesk is running and ready to use via the '${CYAN}${BOLD}webdesk${NC}' command.\n"
+
+    # Display Web Access URLs and Default User Logins
+    echo -e "${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════════════╗"
+    echo -e "║                 🌐 WebDesk Access & Login Credentials                ║"
+    echo -e "╚══════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "  ${BOLD}Encrypted Browser URLs (HTTPS):${NC}"
+    for ip in $(get_ips); do
+        echo -e "    👉 ${CYAN}${BOLD}https://${ip}:${WEB_PORT:-6080}/${NC}"
+    done
+    echo ""
+    echo -e "  ${BOLD}Default Web Login Accounts:${NC}"
+    echo -e "  ┌──────────┬────────────┬──────────────────────────────────┐"
+    echo -e "  │ Username │ Password   │ Role / Access Level              │"
+    echo -e "  ├──────────┼────────────┼──────────────────────────────────┤"
+    echo -e "  │ ${BOLD}admin${NC}    │ ${YELLOW}admin123${NC}   │ Admin (Full Control & Settings)  │"
+    echo -e "  │ ${BOLD}user${NC}     │ ${YELLOW}user123${NC}    │ User (Interactive Desktop)       │"
+    echo -e "  │ ${BOLD}guest${NC}    │ ${YELLOW}guest123${NC}   │ Viewer (View-Only Screen)        │"
+    echo -e "  └──────────┴────────────┴──────────────────────────────────┘"
+    echo -e "  ${DIM}• You can add, edit, or manage accounts anytime via: ${BOLD}webdesk users${NC}"
+
+    if [ -f /etc/xrdp/xrdp.ini ] || command -v xrdp >/dev/null 2>&1; then
+        echo ""
+        echo -e "  ${BOLD}Windows Remote Desktop (mstsc.exe):${NC}"
+        local primary_ip
+        primary_ip=$(get_ips | head -n 1)
+        echo -e "    👉 ${MAGENTA}${BOLD}${primary_ip:-localhost}:${RDP_PORT:-3389}${NC} (Mode ${RDP_MODE:-1})"
+    fi
+    echo -e "${CYAN}────────────────────────────────────────────────────────────────────────${NC}\n"
 
     if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
         read -rp "Would you like to open the Interactive Menu now? (Y/n): " start_now </dev/tty 2>/dev/null || start_now="y"
