@@ -682,6 +682,7 @@ start_webdesk() {
         -shared \
         -listen 127.0.0.1 \
         -rfbport "${VNC_PORT}" \
+        -noshm \
         ${VNC_TUNING} \
         ${PASS_OPT} \
         -bg -o "${LOG_FILE}" >/dev/null 2>&1 || {
@@ -692,6 +693,7 @@ start_webdesk() {
                 -shared \
                 -listen 127.0.0.1 \
                 -rfbport "${VNC_PORT}" \
+                -noshm \
                 ${VNC_TUNING} \
                 ${PASS_OPT} \
                 -bg -o "${LOG_FILE}" >/dev/null 2>&1 || {
@@ -702,6 +704,7 @@ start_webdesk() {
                         -shared \
                         -listen 127.0.0.1 \
                         -rfbport "${VNC_PORT}" \
+                        -noshm \
                         ${VNC_TUNING} \
                         ${PASS_OPT} \
                         -bg -o "${LOG_FILE}" >/dev/null 2>&1 || true
@@ -921,6 +924,7 @@ run_system_service() {
             -shared \
             -listen 127.0.0.1 \
             -rfbport "${VNC_PORT}" \
+            -noshm \
             ${VNC_TUNING} \
             ${PASS_OPT} >> "${LOG_FILE}" 2>&1 &
         VNC_PID=$!
