@@ -569,6 +569,15 @@ start_webdesk() {
     # WebDesk Multi-User Portal handles authentication; x11vnc runs with -nopw on 127.0.0.1
     PASS_OPT="-nopw"
 
+    # Export library paths and binaries for standalone x11vnc / websockify execution
+    MULTIARCH_DIRS=""
+    if [ -d "${VNC_ROOT}/usr/lib" ]; then
+        MULTIARCH_DIRS=$(find "${VNC_ROOT}/usr/lib" -maxdepth 1 -type d \( -name "*-linux-gnu*" -o -name "*arm*" \) 2>/dev/null | tr '\n' ':' | sed 's/:$//' || true)
+    fi
+    export LD_LIBRARY_PATH="${MULTIARCH_DIRS}:${VNC_ROOT}/usr/lib/aarch64-linux-gnu:${VNC_ROOT}/usr/lib/x86_64-linux-gnu:${VNC_ROOT}/usr/lib/arm-linux-gnueabihf:${VNC_ROOT}/usr/lib:${LD_LIBRARY_PATH}"
+    export PYTHONPATH="${INSTALL_DIR}:${SCRIPT_DIR}:${SCRIPT_DIR}/src:${VNC_ROOT}/usr/lib/python3/dist-packages:${PYTHONPATH}"
+    export PATH="${VNC_ROOT}/usr/bin:${PATH}"
+
     # Start x11vnc with auto-auth detection
     DISP_INFO=$(get_active_display_and_auth)
     DETECTED_DISP=$(echo "$DISP_INFO" | cut -d'|' -f1)
