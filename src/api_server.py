@@ -79,6 +79,35 @@ def get_active_viewers_list():
     return [{"username": u, "role": r} for u, (t, r) in ACTIVE_VIEWERS.items()]
 
 
+def get_active_display():
+    active_disp_file = os.path.join(INSTALL_DIR, "active_display")
+    if os.path.exists(active_disp_file):
+        try:
+            with open(active_disp_file, "r") as f:
+                d = f.read().strip()
+                if d:
+                    return d
+        except Exception:
+            pass
+    return os.environ.get("DISPLAY", ":1001")
+
+
+def get_active_auth():
+    active_auth_file = os.path.join(INSTALL_DIR, "active_auth")
+    if os.path.exists(active_auth_file):
+        try:
+            with open(active_auth_file, "r") as f:
+                a = f.read().strip()
+                if a and os.path.exists(a):
+                    return a
+        except Exception:
+            pass
+    for cand in [os.path.expanduser("~/.Xauthority"), "/home/amigo/.Xauthority"]:
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
 class WebDeskAPIHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Suppress noisy standard request logging
@@ -602,8 +631,11 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 self.send_json(400, {"ok": False, "success": False, "error": "Invalid resolution format (expected e.g. 1920x1080)."})
                 return
 
-            display = os.environ.get("DISPLAY", ":0")
+            display = get_active_display()
+            auth = get_active_auth()
             env = dict(os.environ, DISPLAY=display)
+            if auth:
+                env["XAUTHORITY"] = auth
             try:
                 ret = subprocess.run(["xrandr", "-s", res], env=env, capture_output=True, timeout=5)
                 if ret.returncode != 0:
@@ -647,8 +679,11 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                 self.send_json(500, {"ok": False, "success": False, "error": "xdotool binary not found on host."})
                 return
 
-            display = os.environ.get("DISPLAY", ":0")
+            display = get_active_display()
+            auth = get_active_auth()
             env = dict(os.environ, DISPLAY=display)
+            if auth:
+                env["XAUTHORITY"] = auth
             lib_root = os.path.join(INSTALL_DIR, "root", "usr", "lib")
             multiarch_paths = [lib_root]
             if os.path.isdir(lib_root):
@@ -679,8 +714,11 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
 
             data = self.read_json_body()
             action = data.get("action", "").lower().strip()
-            display = os.environ.get("DISPLAY", ":0")
+            display = get_active_display()
+            auth = get_active_auth()
             env = dict(os.environ, DISPLAY=display)
+            if auth:
+                env["XAUTHORITY"] = auth
 
             current_user = os.environ.get("USER") or os.environ.get("LOGNAME")
             if not current_user or current_user == "root":
@@ -746,6 +784,12 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
                     else:
                         subprocess.Popen(["loginctl", "suspend"])
                     self.send_json(200, {"ok": True, "success": True, "action": action, "message": "System suspend initiated."})
+                    return
+
+                elif action in ["restart-service", "restart", "reload"]:
+                    # Restart WebDesk service
+                    subprocess.Popen(["sh", "-c", "pkill -9 -f x11vnc; systemctl restart webdesk.service 2>/dev/null || pkill -9 -f webdesk.sh"])
+                    self.send_json(200, {"ok": True, "success": True, "action": action, "message": "Restarting WebDesk service."})
                     return
 
                 elif action == "reboot":

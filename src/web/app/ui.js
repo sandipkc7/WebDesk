@@ -8,8 +8,12 @@
 
 import * as Log from '../core/util/logging.js';
 import _, { l10n } from './localization.js';
-import { isTouchDevice, isSafari, hasScrollbarGutter, dragThreshold }
-    from '../core/util/browser.js';
+import { isTouchDevice } from '../core/util/browser.js';
+
+const isSafari = () => /Version\/[\d\.]+.*Safari/.test(navigator.userAgent) && !/Chrome\/|Chromium\//.test(navigator.userAgent);
+const hasScrollbarGutter = false;
+const dragThreshold = 10;
+
 import { setCapture, getPointerEvent } from '../core/util/events.js';
 import KeyTable from "../core/input/keysym.js";
 import keysyms from "../core/input/keysymdef.js";
@@ -42,15 +46,33 @@ const UI = {
     reconnectPassword: null,
 
     prime() {
-        return WebUtil.initSettings().then(() => {
+        const runStart = () => {
             if (document.readyState === "interactive" || document.readyState === "complete") {
-                return UI.start();
+                try {
+                    UI.start();
+                } catch (err) {
+                    Log.Error("Error starting UI: " + err);
+                }
+            } else {
+                document.addEventListener('DOMContentLoaded', () => {
+                    try {
+                        UI.start();
+                    } catch (err) {
+                        Log.Error("Error starting UI on DOMContentLoaded: " + err);
+                    }
+                });
             }
+        };
 
-            return new Promise((resolve, reject) => {
-                document.addEventListener('DOMContentLoaded', () => UI.start().then(resolve).catch(reject));
-            });
-        });
+        if (WebUtil.initSettings && typeof WebUtil.initSettings === 'function') {
+            try {
+                WebUtil.initSettings(runStart);
+                return;
+            } catch (err) {
+                Log.Warn("initSettings error: " + err);
+            }
+        }
+        runStart();
     },
 
     // Render default UI and initialize settings menu
@@ -112,14 +134,14 @@ const UI = {
 
         document.documentElement.classList.remove("noVNC_loading");
 
-        let autoconnect = WebUtil.getConfigVar('autoconnect', false);
-        if (autoconnect === 'true' || autoconnect == '1') {
-            autoconnect = true;
-            UI.connect();
-        } else {
+        let autoconnect = WebUtil.getConfigVar('autoconnect', true);
+        if (autoconnect === false || autoconnect === 'false' || autoconnect === '0') {
             autoconnect = false;
             // Show the connect panel on first load unless autoconnecting
             UI.openConnectPanel();
+        } else {
+            autoconnect = true;
+            UI.connect();
         }
 
         return Promise.resolve(UI.rfb);
@@ -719,14 +741,22 @@ const UI = {
         if (val === null) {
             val = WebUtil.readSetting(name, defVal);
         }
-        WebUtil.setSetting(name, val);
+        if (WebUtil.writeSetting) {
+            WebUtil.writeSetting(name, val);
+        } else if (WebUtil.setSetting) {
+            WebUtil.setSetting(name, val);
+        }
         UI.updateSetting(name);
         return val;
     },
 
     // Set the new value, update and disable form control setting
     forceSetting(name, val) {
-        WebUtil.setSetting(name, val);
+        if (WebUtil.writeSetting) {
+            WebUtil.writeSetting(name, val);
+        } else if (WebUtil.setSetting) {
+            WebUtil.setSetting(name, val);
+        }
         UI.updateSetting(name);
         UI.disableSetting(name);
     },
@@ -1642,7 +1672,11 @@ const UI = {
     },
 
     updateLogging() {
-        WebUtil.initLogging(UI.getSetting('logging'));
+        if (WebUtil.initLogging) {
+            WebUtil.initLogging(UI.getSetting('logging'));
+        } else if (WebUtil.init_logging) {
+            WebUtil.init_logging(UI.getSetting('logging'));
+        }
     },
 
     updateDesktopName(e) {
@@ -1684,7 +1718,7 @@ const UI = {
 };
 
 // Set up translations
-const LINGUAS = ["cs", "de", "el", "es", "fr", "ja", "ko", "nl", "pl", "pt_BR", "ru", "sv", "tr", "zh_CN", "zh_TW"];
+const LINGUAS = ["cs", "de", "el", "es", "fr", "ja", "ko", "nl", "pl", "pt_BR", "ru", "sv", "tr", "zh_CN", "zh_TW", "zh"];
 l10n.setup(LINGUAS);
 if (l10n.language === "en" || l10n.dictionary !== undefined) {
     UI.prime();
@@ -1697,8 +1731,8 @@ if (l10n.language === "en" || l10n.dictionary !== undefined) {
             return response.json();
         })
         .then((translations) => { l10n.dictionary = translations; })
-        .catch(err => Log.Error("Failed to load translations: " + err))
-        .then(UI.prime);
+        .catch(err => Log.Warn("Failed to load translations: " + err))
+        .then(() => UI.prime());
 }
 
 export default UI;

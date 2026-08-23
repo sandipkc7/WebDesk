@@ -148,6 +148,8 @@ ensure_runtime_files() {
             cp -f "${SCRIPT_DIR}/src/web/app/ui.js" "${VNC_ROOT}/usr/share/novnc/app/ui.js" 2>/dev/null || true
         elif [ -f "${SCRIPT_DIR}/app/ui.js" ]; then
             cp -f "${SCRIPT_DIR}/app/ui.js" "${VNC_ROOT}/usr/share/novnc/app/ui.js" 2>/dev/null || true
+        else
+            curl -fsSL --connect-timeout 10 --max-time 30 "${GITHUB_RAW}/src/web/app/ui.js" -o "${VNC_ROOT}/usr/share/novnc/app/ui.js" 2>/dev/null || true
         fi
     fi
 
@@ -163,6 +165,10 @@ try:
 except Exception:
     pass
 " 2>/dev/null || true
+}
+
+sync_web_assets() {
+    ensure_runtime_files "$@"
 }
 
 get_profile_flags() {
@@ -398,13 +404,127 @@ user_auth.reset_master_password_to_rule()
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
     fi
 
+    # Interactive Target Display Selection on Installation
+    local init_target_display="auto"
+    local detected_disp_info
+    detected_disp_info=$(get_active_display_and_auth)
+    local detected_disp
+    detected_disp=$(echo "$detected_disp_info" | cut -d'|' -f1)
+
+    # Dynamic Discovery: Find all active NoMachine displays
+    local nx_displays=()
+    for nx_pid in $(pgrep -u "${REAL_USER}" -x "nxrunner.bin" 2>/dev/null || pgrep -x "nxrunner.bin" 2>/dev/null || pgrep -u "${REAL_USER}" -x "nxnode.bin" 2>/dev/null || true); do
+        if [ -n "$nx_pid" ] && [ -d "/proc/${nx_pid}" ]; then
+            local nd
+            nd=$(tr '\0' '\n' < "/proc/${nx_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
+            if [ -n "$nd" ]; then
+                local clean_nd="${nd%.*}"
+                if [[ ! " ${nx_displays[*]} " =~ " ${clean_nd} " ]]; then
+                    nx_displays+=("${clean_nd}")
+                fi
+            fi
+        fi
+    done
+
+    # Check XRDP
+    local xrdp_disp=""
+    if pgrep -f "xrdp" >/dev/null 2>&1; then
+        local xd
+        xd=$(ps -eo pid,args | grep -E 'Xorg.*xrdp' | grep -oP ':\d+' | head -n 1 || echo "")
+        [ -n "$xd" ] && xrdp_disp="$xd"
+    fi
+
+    if [ -n "$tty_in" ]; then
+        echo -e "\n${CYAN}${BOLD}╔══════════════════════════════════════════════════════════════════════╗"
+        echo -e "║              🖥️  WebDesk Display & Session Selection                 ║"
+        echo -e "╚══════════════════════════════════════════════════════════════════════╝${NC}\n"
+        echo -e "  WebDesk captures your live Linux desktop and streams it through the"
+        echo -e "  Encrypted Web Client (HTTPS / Port 6080) and Windows RDP (Port 3389).\n"
+        echo -e "  ${BOLD}Detected Active Displays & Sessions on this Machine:${NC}"
+        echo -e "  ----------------------------------------------------------------------"
+        echo -e "  ${BOLD}[1]${NC} 🌟 ${GREEN}${BOLD}Auto-Detect (Recommended)${NC} ${DIM}[Detected: ${detected_disp:-:0}]${NC}"
+        echo -e "      • Automatically tracks and mirrors whichever desktop is active (NoMachine, user desktop, or login screen)."
+
+        if [ ${#nx_displays[@]} -gt 0 ]; then
+            for nxd in "${nx_displays[@]}"; do
+                echo -e "  ${BOLD}[2]${NC} 🚀 ${CYAN}${BOLD}NoMachine Virtual Session (${nxd})${NC} ${GREEN}● Active${NC}"
+            done
+        else
+            echo -e "  ${BOLD}[2]${NC} 🚀 ${CYAN}NoMachine Virtual Session (:1001)${NC} ${DIM}○ Inactive${NC}"
+        fi
+
+        echo -e "  ${BOLD}[3]${NC} 🖥️  ${YELLOW}${BOLD}Physical / Default Display (:0)${NC}"
+
+        if [ -n "$xrdp_disp" ]; then
+            echo -e "  ${BOLD}[4]${NC} 🪟 ${MAGENTA}${BOLD}Windows XRDP Session (${xrdp_disp})${NC} ${GREEN}● Active${NC}"
+        else
+            echo -e "  ${BOLD}[4]${NC} 🪟 ${MAGENTA}Windows XRDP Session (:10)${NC} ${DIM}○ Inactive${NC}"
+        fi
+
+        echo -e "  ${BOLD}[5]${NC} ✏️  ${BOLD}Custom Display / Socket (e.g. :1, :2, :1002)${NC}"
+        echo -e "  ----------------------------------------------------------------------"
+
+        echo -en "  ${BOLD}Select Target Display [1-5] (Default: 1 - Auto-Detect): ${NC}"
+        local user_d_choice="1"
+        if [ "$tty_in" = "/dev/tty" ]; then
+            read -r user_d_choice </dev/tty 2>/dev/null || user_d_choice="1"
+        else
+            read -r user_d_choice || user_d_choice="1"
+        fi
+        [ -z "$user_d_choice" ] && user_d_choice="1"
+
+        case "$user_d_choice" in
+            1)
+                init_target_display="auto"
+                ;;
+            2)
+                if [ ${#nx_displays[@]} -gt 0 ]; then
+                    init_target_display="${nx_displays[0]}"
+                else
+                    init_target_display=":1001"
+                fi
+                ;;
+            3)
+                init_target_display=":0"
+                ;;
+            4)
+                init_target_display="${xrdp_disp:-:10}"
+                ;;
+            5)
+                echo -en "  Enter X11 display string (e.g. :1001 or :1): "
+                local custom_d=""
+                if [ "$tty_in" = "/dev/tty" ]; then
+                    read -r custom_d </dev/tty 2>/dev/null || true
+                else
+                    read -r custom_d || true
+                fi
+                custom_d=$(echo "$custom_d" | tr -dc '0-9:')
+                if [[ ! "$custom_d" =~ ^:[0-9]+$ ]]; then
+                    custom_d=":${custom_d}"
+                fi
+                if [[ "$custom_d" =~ ^:[0-9]+$ ]]; then
+                    init_target_display="$custom_d"
+                else
+                    init_target_display="auto"
+                fi
+                ;;
+            *)
+                init_target_display="auto"
+                ;;
+        esac
+    fi
+
+    TARGET_DISPLAY="${init_target_display}"
+    save_config_var "TARGET_DISPLAY" "${TARGET_DISPLAY}"
+    echo -e "\n  ${GREEN}${BOLD}✔ Target Display set to: ${TARGET_DISPLAY}${NC}"
+
     # Environment Auto-Detection & Mode Configuration
     echo -e "\n${CYAN}==============================================================${NC}"
     echo -e "  ${BOLD}[🖥️  Desktop Streaming & Session Mode Setup]${NC}"
-    echo -e "  Select the session mode that matches your workflow:\n"
-    echo -e "    ${GREEN}${BOLD}Mode 1)${NC} 🪞 ${BOLD}Live Screen Mirror & Multi-User Collaboration${NC} (:0)"
-    echo -e "             • All users share & collaborate on the exact same screen simultaneously."
-    echo -e "             • Fully supports Headless Cloud VPS (virtual buffer), Physical PCs, & RustDesk/NoMachine.\n"
+    echo -e "  Select the session mode for Windows RDP & Web client:\n"
+    echo -e "    ${GREEN}${BOLD}Mode 1)${NC} 🪞 ${BOLD}Live Screen Mirror (${TARGET_DISPLAY})${NC}"
+    echo -e "             • Mirrors your active display (${TARGET_DISPLAY}) for both Web Client (6080) and Windows RDP (3389)."
+    echo -e "             • Fully supports NoMachine sessions, Headless VPS, & physical screens.\n"
     echo -e "    ${CYAN}${BOLD}Mode 2)${NC} 🖥️  ${BOLD}Private Dedicated Virtual Desktop${NC}"
     echo -e "             • Launches an isolated, private virtual X11 desktop for your account."
     echo -e "             • Best for background RDP work without touching the main screen.\n"
@@ -413,19 +533,16 @@ user_auth.reset_master_password_to_rule()
     echo -e "             • No shared mouse/keyboard or interference between users."
     echo -e "${CYAN}==============================================================${NC}"
 
-    local auto_mode="2"
-    local detected_disp_info
-    detected_disp_info=$(get_active_display_and_auth)
-    local detected_disp
-    detected_disp=$(echo "$detected_disp_info" | cut -d'|' -f1)
-    if [ -n "$detected_disp" ] && { [ -S "/tmp/.X11-unix/X${detected_disp#:}" ] || [ -r "/sys/class/tty/tty0/active" ]; }; then
-        auto_mode="1"
-    fi
+    local auto_mode="1"
 
     local selected_mode="$auto_mode"
-    if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
-        echo -en "  Select Mode [1, 2, or 3] (Auto-detected default: ${BOLD}Mode ${auto_mode}${NC}): "
-        read -r user_mode_choice </dev/tty 2>/dev/null || user_mode_choice="$auto_mode"
+    if [ -n "$tty_in" ]; then
+        echo -en "  Select Mode [1, 2, or 3] (Default: Mode 1 - Live Mirror): "
+        if [ "$tty_in" = "/dev/tty" ]; then
+            read -r user_mode_choice </dev/tty 2>/dev/null || user_mode_choice="$auto_mode"
+        else
+            read -r user_mode_choice || user_mode_choice="$auto_mode"
+        fi
         case "$user_mode_choice" in
             1|2|3) selected_mode="$user_mode_choice" ;;
             *) selected_mode="$auto_mode" ;;
@@ -632,6 +749,7 @@ start_webdesk() {
 
     # WebDesk Multi-User Portal handles authentication; x11vnc runs with -nopw on 127.0.0.1
     PASS_OPT="-nopw"
+    unset WAYLAND_DISPLAY
 
     # Export library paths and binaries for standalone x11vnc / websockify execution
     MULTIARCH_DIRS=""
@@ -771,23 +889,54 @@ get_active_display_and_auth() {
     local active_auth=""
     local active_vt=""
 
-    # 1. First priority: Inspect logged-in user desktop session process (MATE, GNOME, XFCE, Cinnamon, KDE, LXDE, etc.)
-    for proc_name in mate-session gnome-session-binary gnome-session xfce4-session cinnamon-session startplasma-x11 plasmashell lxsession x-session-manager; do
-        local sess_pid
-        sess_pid=$(pgrep -u "${REAL_USER}" -x "$proc_name" 2>/dev/null | head -n 1 || pgrep -x "$proc_name" 2>/dev/null | head -n 1 || true)
-        if [ -n "$sess_pid" ] && [ -d "/proc/${sess_pid}" ]; then
-            local p_disp p_auth
-            p_disp=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
-            p_auth=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^XAUTHORITY=' | cut -d= -f2- | head -n 1 || true)
-            if [ -n "$p_disp" ] && [[ ! "$p_disp" =~ ^(localhost)?:?([1-9][0-9]+)\.? ]]; then
-                active_disp="$p_disp"
-                [ -n "$p_auth" ] && [ -r "$p_auth" ] && active_auth="$p_auth"
-                break
-            fi
-        fi
-    done
+    # 0. Check for manual display override in config or env
+    if [ -n "${TARGET_DISPLAY:-}" ] && [ "${TARGET_DISPLAY}" != "auto" ]; then
+        active_disp="${TARGET_DISPLAY}"
+    elif [ -n "${DISPLAY_NUM:-}" ] && [ "${DISPLAY_NUM}" != "auto" ] && [ "${DISPLAY_NUM}" != ":0" ] && [ -S "/tmp/.X11-unix/X${DISPLAY_NUM#:}" ]; then
+        active_disp="${DISPLAY_NUM}"
+    fi
 
-    # 2. Second priority: Inspect real running Xorg / X11 server process (ignoring high SSH forwarding displays)
+    # 1. Check NoMachine / NX session display (e.g. :1001)
+    if [ -z "$active_disp" ]; then
+        for nx_pid in $(pgrep -u "${REAL_USER}" -x "nxrunner.bin" 2>/dev/null || pgrep -x "nxrunner.bin" 2>/dev/null || pgrep -u "${REAL_USER}" -x "nxnode.bin" 2>/dev/null || true); do
+            if [ -n "$nx_pid" ] && [ -d "/proc/${nx_pid}" ]; then
+                local p_disp p_auth
+                p_disp=$(tr '\0' '\n' < "/proc/${nx_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
+                p_auth=$(tr '\0' '\n' < "/proc/${nx_pid}/environ" 2>/dev/null | grep -E '^XAUTHORITY=' | cut -d= -f2- | head -n 1 || true)
+                if [ -n "$p_disp" ]; then
+                    local clean_disp="${p_disp%.*}"
+                    if [ -S "/tmp/.X11-unix/X${clean_disp#:}" ]; then
+                        active_disp="$clean_disp"
+                        [ -n "$p_auth" ] && [ -r "$p_auth" ] && active_auth="$p_auth"
+                        break
+                    fi
+                fi
+            fi
+        done
+    fi
+
+    # 2. Inspect logged-in user desktop session process (MATE, GNOME, XFCE, Cinnamon, KDE, LXDE, etc.)
+    if [ -z "$active_disp" ]; then
+        for proc_name in mate-session gnome-session-binary gnome-session xfce4-session cinnamon-session startplasma-x11 plasmashell lxsession x-session-manager; do
+            for sess_pid in $(pgrep -u "${REAL_USER}" -x "$proc_name" 2>/dev/null || pgrep -x "$proc_name" 2>/dev/null || true); do
+                if [ -n "$sess_pid" ] && [ -d "/proc/${sess_pid}" ]; then
+                    local p_disp p_auth
+                    p_disp=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
+                    p_auth=$(tr '\0' '\n' < "/proc/${sess_pid}/environ" 2>/dev/null | grep -E '^XAUTHORITY=' | cut -d= -f2- | head -n 1 || true)
+                    if [ -n "$p_disp" ] && [[ ! "$p_disp" =~ ^(localhost|127\.0\.0\.1): ]]; then
+                        local clean_disp="${p_disp%.*}"
+                        if [ -S "/tmp/.X11-unix/X${clean_disp#:}" ]; then
+                            active_disp="$clean_disp"
+                            [ -n "$p_auth" ] && [ -r "$p_auth" ] && active_auth="$p_auth"
+                            break 2
+                        fi
+                    fi
+                fi
+            done
+        done
+    fi
+
+    # 3. Check real running Xorg / X11 server process
     if [ -z "$active_disp" ]; then
         local xorg_match=""
         xorg_match=$(ps -eo pid,args | grep -E '[X]org|[X] ' | grep -v 'grep' | grep -v 'Xvfb' | head -n 1 || true)
@@ -795,14 +944,14 @@ get_active_display_and_auth() {
             local cand_disp cand_auth
             cand_disp=$(echo "$xorg_match" | grep -oP ':\d+' | head -n 1 || echo "")
             cand_auth=$(echo "$xorg_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
-            if [ -n "$cand_disp" ] && [[ ! "$cand_disp" =~ ^:([1-9][0-9]+)$ ]]; then
+            if [ -n "$cand_disp" ] && [ -S "/tmp/.X11-unix/X${cand_disp#:}" ]; then
                 active_disp="$cand_disp"
-                [ -n "$cand_auth" ] && active_auth="$cand_auth"
+                [ -n "$cand_auth" ] && [ -r "$cand_auth" ] && active_auth="$cand_auth"
             fi
         fi
     fi
 
-    # 3. Check active console VT (e.g. tty7, tty8) from sysfs
+    # 4. Check active console VT (e.g. tty7, tty8) from sysfs
     if [ -z "$active_disp" ] && [ -r "/sys/class/tty/tty0/active" ]; then
         active_vt=$(cat /sys/class/tty/tty0/active 2>/dev/null || true)
         if [ -n "$active_vt" ]; then
@@ -811,7 +960,7 @@ get_active_display_and_auth() {
             if [ -n "$vt_match" ]; then
                 local cand_disp
                 cand_disp=$(echo "$vt_match" | grep -oP ':\d+' | head -n 1 || echo "")
-                if [ -n "$cand_disp" ] && [[ ! "$cand_disp" =~ ^:([1-9][0-9]+)$ ]]; then
+                if [ -n "$cand_disp" ]; then
                     active_disp="$cand_disp"
                     active_auth=$(echo "$vt_match" | grep -oP '(?<=-auth\s)\S+' || echo "")
                 fi
@@ -819,42 +968,53 @@ get_active_display_and_auth() {
         fi
     fi
 
-    # 4. Check systemd-logind active session on seat0 (ignoring SSH remote displays)
+    # 5. Check systemd-logind active session on seat0
     if [ -z "$active_disp" ] && command -v loginctl >/dev/null 2>&1; then
         local active_session
         active_session=$(loginctl show-seat seat0 -p ActiveSession --value 2>/dev/null || true)
         if [ -n "$active_session" ]; then
             local sess_disp
             sess_disp=$(loginctl show-session "$active_session" -p Display --value 2>/dev/null || true)
-            if [ -n "$sess_disp" ] && [[ ! "$sess_disp" =~ ^(localhost)?:?([1-9][0-9]+)\.? ]]; then
-                active_disp="$sess_disp"
+            if [ -n "$sess_disp" ] && [[ ! "$sess_disp" =~ ^(localhost|127\.0\.0\.1): ]]; then
+                active_disp="${sess_disp%.*}"
             fi
         fi
     fi
 
-    # 5. Check for active X11 unix domain socket (ignoring displays >= 10)
+    # 6. Check for active X11 unix domain sockets in /tmp/.X11-unix/
     if [ -z "$active_disp" ]; then
-        if [ -S "/tmp/.X11-unix/X0" ]; then
-            active_disp=":0"
-        elif [ -S "/tmp/.X11-unix/X1" ]; then
-            active_disp=":1"
-        else
-            active_disp=":0"
-        fi
+        for sock in /tmp/.X11-unix/X*; do
+            if [ -S "$sock" ]; then
+                local s_num="${sock##*/X}"
+                if [ -n "$s_num" ]; then
+                    active_disp=":${s_num}"
+                    break
+                fi
+            fi
+        done
     fi
 
-    # 6. Locate auth file
+    [ -z "$active_disp" ] && active_disp=":0"
+
+    # 7. Locate auth file
     if [ -z "$active_auth" ] || [ ! -r "$active_auth" ]; then
         if [ -r "${USER_HOME}/.Xauthority" ]; then
             active_auth="${USER_HOME}/.Xauthority"
-        elif [ -r "/var/run/lightdm/root/${active_disp}" ]; then
-            active_auth="/var/run/lightdm/root/${active_disp}"
-        elif [ -r "/run/lightdm/root/${active_disp}" ]; then
-            active_auth="/run/lightdm/root/${active_disp}"
-        elif [ -r "/run/lightdm/${REAL_USER}/xauthority" ]; then
-            active_auth="/run/lightdm/${REAL_USER}/xauthority"
-        elif [ -r "${HOME}/.Xauthority" ]; then
-            active_auth="${HOME}/.Xauthority"
+        elif [ -d "${USER_HOME}/.nx" ]; then
+            local nx_auth
+            nx_auth=$(find "${USER_HOME}/.nx" -name "authority" 2>/dev/null | head -n 1 || true)
+            [ -n "$nx_auth" ] && [ -r "$nx_auth" ] && active_auth="$nx_auth"
+        fi
+        if [ -z "$active_auth" ] || [ ! -r "$active_auth" ]; then
+            if [ -r "/var/run/lightdm/root/${active_disp}" ]; then
+                active_auth="/var/run/lightdm/root/${active_disp}"
+            elif [ -r "/run/lightdm/root/${active_disp}" ]; then
+                active_auth="/run/lightdm/root/${active_disp}"
+            elif [ -r "/run/lightdm/${REAL_USER}/xauthority" ]; then
+                active_auth="/run/lightdm/${REAL_USER}/xauthority"
+            elif [ -r "${HOME}/.Xauthority" ]; then
+                active_auth="${HOME}/.Xauthority"
+            fi
         fi
     fi
 
@@ -863,6 +1023,7 @@ get_active_display_and_auth() {
 
 # System-level 24/7 service (Handles Display Manager / LightDM login screen, switch-user & user sessions)
 run_system_service() {
+    unset WAYLAND_DISPLAY
     export WEBDESK_INSTALL_DIR="${INSTALL_DIR}"
     export HOME="${USER_HOME}"
     MULTIARCH_DIRS=""
@@ -912,10 +1073,14 @@ run_system_service() {
     # 4. Dynamic Display & Switch-User Supervisor Loop
     log_msg "Entering Dynamic Display & Authentication Supervisor loop..."
     while true; do
+        unset WAYLAND_DISPLAY
         get_profile_flags
         DISP_INFO=$(get_active_display_and_auth)
         ACTIVE_DISP=$(echo "$DISP_INFO" | cut -d'|' -f1)
         ACTIVE_AUTH=$(echo "$DISP_INFO" | cut -d'|' -f2)
+
+        echo "${ACTIVE_DISP}" > "${INSTALL_DIR}/active_display" 2>/dev/null || true
+        [ -n "${ACTIVE_AUTH}" ] && echo "${ACTIVE_AUTH}" > "${INSTALL_DIR}/active_auth" 2>/dev/null || true
 
         AUTH_FLAG=""
         if [ -n "$ACTIVE_AUTH" ] && [ -r "$ACTIVE_AUTH" ]; then
@@ -1085,18 +1250,14 @@ set_profile() {
             ;;
     esac
 
-    echo "PROFILE=${PROFILE}" > "${CONFIG_FILE}"
+    save_config_var "PROFILE" "${PROFILE}"
     get_profile_flags
     echo -e "${GREEN}✔ Performance Profile switched to: ${BOLD}${PROFILE_DESC}${NC}"
     
     if is_running; then
         echo -e "${YELLOW}--> Restarting WebDesk to apply changes...${NC}"
         if is_service_installed; then
-            if [ "$EUID" -eq 0 ]; then
-                systemctl restart webdesk.service 2>/dev/null || true
-            elif command -v sudo >/dev/null 2>&1; then
-                sudo systemctl restart webdesk.service 2>/dev/null || true
-            fi
+            restart_system_service
         else
             stop_webdesk_silent
             start_webdesk
@@ -1104,16 +1265,179 @@ set_profile() {
     fi
 }
 
+select_target_display() {
+    clear
+    echo -e "${BOLD}${CYAN}--- Target Desktop Display / Session Selection ---${NC}\n"
+
+    # Reload config
+    if [ -f "${CONFIG_FILE}" ]; then
+        # shellcheck disable=SC1090
+        source "${CONFIG_FILE}" 2>/dev/null || true
+    fi
+    local current_target="${TARGET_DISPLAY:-auto}"
+
+    local detected_info
+    detected_info=$(get_active_display_and_auth)
+    local detected_disp
+    detected_disp=$(echo "$detected_info" | cut -d'|' -f1)
+
+    echo -e "  Current Setting : ${GREEN}${BOLD}${current_target}${NC}"
+    echo -e "  Active Detected : ${CYAN}${BOLD}${detected_disp:-:0}${NC}\n"
+    echo -e "  ${BOLD}Choose target display to capture and stream:${NC}\n"
+
+    # Scan available sockets and sessions
+    local nx_disp=""
+    local xrdp_disp=""
+
+    # Dynamic Discovery: Find all active NoMachine displays
+    local nx_displays=()
+    for nx_pid in $(pgrep -u "${REAL_USER}" -x "nxrunner.bin" 2>/dev/null || pgrep -x "nxrunner.bin" 2>/dev/null || pgrep -u "${REAL_USER}" -x "nxnode.bin" 2>/dev/null || true); do
+        if [ -n "$nx_pid" ] && [ -d "/proc/${nx_pid}" ]; then
+            local nd
+            nd=$(tr '\0' '\n' < "/proc/${nx_pid}/environ" 2>/dev/null | grep -E '^DISPLAY=' | cut -d= -f2- | head -n 1 || true)
+            if [ -n "$nd" ]; then
+                local clean_nd="${nd%.*}"
+                if [[ ! " ${nx_displays[*]} " =~ " ${clean_nd} " ]]; then
+                    nx_displays+=("${clean_nd}")
+                fi
+            fi
+        fi
+    done
+
+    # Check XRDP
+    if pgrep -f "xrdp" >/dev/null 2>&1; then
+        local xd
+        xd=$(ps -eo pid,args | grep -E 'Xorg.*xrdp' | grep -oP ':\d+' | head -n 1 || echo "")
+        [ -n "$xd" ] && xrdp_disp="$xd"
+    fi
+
+    echo -e "  ${BOLD}[1]${NC} 🌟 ${GREEN}${BOLD}Auto-Detect (Recommended)${NC}"
+    echo -e "      • Automatically detects and mirrors the active session (NoMachine, user desktop, or login screen)."
+
+    if [ ${#nx_displays[@]} -gt 0 ]; then
+        for nxd in "${nx_displays[@]}"; do
+            echo -e "  ${BOLD}[2]${NC} 🚀 ${CYAN}${BOLD}NoMachine Virtual Session (${nxd})${NC} ${GREEN}● Active${NC}"
+        done
+    else
+        echo -e "  ${BOLD}[2]${NC} 🚀 ${CYAN}NoMachine Virtual Session (:1001)${NC} ${DIM}○ Inactive${NC}"
+    fi
+
+    echo -e "  ${BOLD}[3]${NC} 🖥️  ${YELLOW}${BOLD}Physical / Default Display (:0)${NC}"
+
+    if [ -n "$xrdp_disp" ]; then
+        echo -e "  ${BOLD}[4]${NC} 🪟 ${MAGENTA}${BOLD}Windows XRDP Session (${xrdp_disp})${NC} ${GREEN}● Active${NC}"
+    else
+        echo -e "  ${BOLD}[4]${NC} 🪟 ${MAGENTA}Windows XRDP Session (:10)${NC} ${DIM}○ Inactive${NC}"
+    fi
+
+    echo -e "  ${BOLD}[5]${NC} ✏️  ${BOLD}Custom Display / Socket (e.g. :1, :2, :1002)${NC}"
+    echo -e "  ${BOLD}[0]${NC} ↩  Back to Main Menu\n"
+
+    read -rp "Select display option [0-5]: " d_choice </dev/tty || return 0
+
+    local new_target=""
+    case "$d_choice" in
+        1)
+            new_target="auto"
+            ;;
+        2)
+            if [ ${#nx_displays[@]} -gt 0 ]; then
+                new_target="${nx_displays[0]}"
+            else
+                new_target=":1001"
+            fi
+            ;;
+        3)
+            new_target=":0"
+            ;;
+        4)
+            new_target="${xrdp_disp:-:10}"
+            ;;
+        5)
+            read -rp "Enter X11 display string (e.g. :1001 or :1): " custom_d </dev/tty || return 0
+            custom_d=$(echo "$custom_d" | tr -dc '0-9:')
+            if [[ ! "$custom_d" =~ ^:[0-9]+$ ]]; then
+                custom_d=":${custom_d}"
+            fi
+            if [[ ! "$custom_d" =~ ^:[0-9]+$ ]]; then
+                echo -e "${RED}Invalid display format (e.g. :1001).${NC}"
+                return 1
+            fi
+            new_target="$custom_d"
+            ;;
+        0|*)
+            return 0
+            ;;
+    esac
+
+    set_target_display "${new_target}"
+}
+
+restart_system_service() {
+    if [ "$EUID" -eq 0 ]; then
+        systemctl restart webdesk.service 2>/dev/null || true
+    else
+        # Try local API restart first if API server is running on 6085
+        if curl -k -s --connect-timeout 1 https://127.0.0.1:6085/api/health >/dev/null 2>&1; then
+            local adm_pass
+            adm_pass=$(python3 -c "import sys; sys.path.insert(0, '${INSTALL_DIR}'); import user_auth; print(user_auth.load_users().get('admin', {}).get('password', 'admin123'))" 2>/dev/null || echo "admin123")
+            local tkn
+            tkn=$(curl -k -s -X POST https://127.0.0.1:6085/api/login -H "Content-Type: application/json" -d "{\"username\":\"admin\",\"password\":\"${adm_pass}\"}" 2>/dev/null | grep -oP '(?<="token": ")[^"]+' || true)
+            if [ -n "$tkn" ]; then
+                curl -k -s -X POST https://127.0.0.1:6085/api/power -H "Authorization: Bearer ${tkn}" -H "Content-Type: application/json" -d '{"action":"restart-service"}' >/dev/null 2>&1 || true
+                return 0
+            fi
+        fi
+        systemctl --no-ask-password restart webdesk.service 2>/dev/null || sudo -n systemctl restart webdesk.service 2>/dev/null || true
+    fi
+}
+
+set_target_display() {
+    local target="${1:-auto}"
+    save_config_var "TARGET_DISPLAY" "${target}"
+    export TARGET_DISPLAY="${target}"
+    echo -e "\n${GREEN}✔ Target Display configured to: ${BOLD}${target}${NC}"
+
+    if is_running; then
+        echo -e "${YELLOW}--> Restarting WebDesk to attach to display ${target}...${NC}"
+        if is_service_installed; then
+            restart_system_service
+        else
+            stop_webdesk_silent
+            start_webdesk
+        fi
+        sleep 1.5
+        echo -e "${GREEN}✔ WebDesk is now streaming display: ${BOLD}${target}${NC}"
+    fi
+}
+
 status_webdesk() {
     get_profile_flags
-    CUR_RES=$(DISPLAY="${DISPLAY_NUM}" xrandr 2>/dev/null | grep -E '\*' | awk '{print $1}' || echo "Default")
+    local cur_disp=""
+    local cur_auth=""
+    if [ -f "${INSTALL_DIR}/active_display" ]; then
+        cur_disp=$(cat "${INSTALL_DIR}/active_display" 2>/dev/null || true)
+    fi
+    if [ -f "${INSTALL_DIR}/active_auth" ]; then
+        cur_auth=$(cat "${INSTALL_DIR}/active_auth" 2>/dev/null || true)
+    fi
+    if [ -z "$cur_disp" ]; then
+        local d_info
+        d_info=$(get_active_display_and_auth)
+        cur_disp=$(echo "$d_info" | cut -d'|' -f1)
+        cur_auth=$(echo "$d_info" | cut -d'|' -f2)
+    fi
+    local auth_env=""
+    [ -n "$cur_auth" ] && [ -r "$cur_auth" ] && auth_env="XAUTHORITY=${cur_auth}"
+    CUR_RES=$(DISPLAY="${cur_disp:-:0}" ${auth_env} xrandr 2>/dev/null | grep -E '\*' | awk '{print $1}' || echo "Default")
     if is_running; then
         echo -e "${GREEN}${BOLD}● WebDesk is RUNNING${NC}"
         if is_service_installed; then
             echo -e "  Service Mode     : ${GREEN}${BOLD}System Service (Login Screen / LightDM Active)${NC}"
         else
-            echo -e "  Service Mode     : ${CYAN}User Session Mode (:0)${NC}"
+            echo -e "  Service Mode     : ${CYAN}User Session Mode (${cur_disp:-:0})${NC}"
         fi
+        echo -e "  Active Display   : ${CYAN}${BOLD}${cur_disp:-:0}${NC}"
         echo -e "  Security Mode    : ${GREEN}${BOLD}Encrypted (HTTPS / TLS / WSS)${NC}"
         echo -e "  Speed & Quality  : ${MAGENTA}${BOLD}${PROFILE_DESC}${NC}"
         echo -e "  Resolution       : ${CYAN}${CUR_RES}${NC}"
@@ -2503,7 +2827,23 @@ BANNER_EOF
     echo -e "  =============================================================="
 
     get_profile_flags
-    CUR_RES=$(DISPLAY="${DISPLAY_NUM}" xrandr 2>/dev/null | grep -E '\*' | awk '{print $1}' || echo "Default")
+    local cur_disp=""
+    local cur_auth=""
+    if [ -f "${INSTALL_DIR}/active_display" ]; then
+        cur_disp=$(cat "${INSTALL_DIR}/active_display" 2>/dev/null || true)
+    fi
+    if [ -f "${INSTALL_DIR}/active_auth" ]; then
+        cur_auth=$(cat "${INSTALL_DIR}/active_auth" 2>/dev/null || true)
+    fi
+    if [ -z "$cur_disp" ]; then
+        local d_info
+        d_info=$(get_active_display_and_auth)
+        cur_disp=$(echo "$d_info" | cut -d'|' -f1)
+        cur_auth=$(echo "$d_info" | cut -d'|' -f2)
+    fi
+    local auth_env=""
+    [ -n "$cur_auth" ] && [ -r "$cur_auth" ] && auth_env="XAUTHORITY=${cur_auth}"
+    CUR_RES=$(DISPLAY="${cur_disp:-:0}" ${auth_env} xrandr 2>/dev/null | grep -E '\*' | awk '{print $1}' || echo "Default")
 
     if is_running; then
         if is_service_enabled; then
@@ -2515,6 +2855,9 @@ BANNER_EOF
         echo -e "  Status     : ${RED}${BOLD}○ STOPPED${NC}"
     fi
 
+    local target_desc="${TARGET_DISPLAY:-auto}"
+    [ "$target_desc" = "auto" ] && target_desc="Auto-Detect (${cur_disp:-:0})"
+    echo -e "  Display    : ${CYAN}${BOLD}${cur_disp:-:0}${NC} ${DIM}[Target: ${target_desc}]${NC}"
     echo -e "  Profile    : ${MAGENTA}${PROFILE_DESC}${NC}"
     echo -e "  Resolution : ${CYAN}${CUR_RES}${NC}"
 
@@ -2549,14 +2892,15 @@ interactive_menu() {
 
         echo -e "  ${BOLD}3)${NC} ⚡ Change Speed & Quality Profile"
         echo -e "  ${BOLD}4)${NC} 📐 Change Remote Display Resolution"
-        echo -e "  ${BOLD}5)${NC} 🛡️  Administration (Master Password Required)"
-        echo -e "  ${BOLD}6)${NC} 🖥️  Manage Login Screen Service (24/7)"
-        echo -e "  ${BOLD}7)${NC} 🖥️  Launch Native GUI Control Panel"
-        echo -e "  ${BOLD}8)${NC} 📜 View Live Service Logs"
-        echo -e "  ${BOLD}9)${NC} 🩺 Health Check & Firewall Diagnostics"
+        echo -e "  ${BOLD}5)${NC} 🖥️  Select Target Display (Auto / NoMachine / XRDP / :0 / Custom)"
+        echo -e "  ${BOLD}6)${NC} 🛡️  Administration (Master Password Required)"
+        echo -e "  ${BOLD}7)${NC} 🖥️  Manage Login Screen Service (24/7)"
+        echo -e "  ${BOLD}8)${NC} 🖥️  Launch Native GUI Control Panel"
+        echo -e "  ${BOLD}9)${NC} 📜 View Live Service Logs"
+        echo -e "  ${BOLD}10)${NC} 🩺 Health Check & Firewall Diagnostics"
         echo -e "  ${BOLD}0)${NC} 🚪 Exit\n"
 
-        if ! read -rp "Select an option [0-9]: " choice </dev/tty; then
+        if ! read -rp "Select an option [0-10]: " choice </dev/tty; then
             echo ""
             break
         fi
@@ -2576,13 +2920,15 @@ interactive_menu() {
                     if [ "$EUID" -eq 0 ]; then
                         systemctl restart webdesk.service 2>/dev/null || true
                     elif command -v sudo >/dev/null 2>&1; then
-                        sudo systemctl restart webdesk.service 2>/dev/null || true
+                        sudo systemctl restart webdesk.service 2>/dev/null || systemctl restart webdesk.service 2>/dev/null || true
+                    else
+                        systemctl restart webdesk.service 2>/dev/null || true
                     fi
                     sleep 1.5
                     if is_running; then
                         echo -e "${GREEN}✔ WebDesk system service restarted successfully.${NC}"
                     else
-                        echo -e "${RED}[!] Failed to restart service. Check logs in Option 8.${NC}"
+                        echo -e "${RED}[!] Failed to restart service. Check logs in Option 9.${NC}"
                     fi
                 else
                     echo -e "${YELLOW}Restarting WebDesk user session...${NC}"
@@ -2636,9 +2982,13 @@ interactive_menu() {
                 pause_prompt
                 ;;
             5)
-                administration_menu
+                select_target_display
+                pause_prompt
                 ;;
             6)
+                administration_menu
+                ;;
+            7)
                 clear
                 echo -e "${BOLD}${CYAN}--- Login Screen (LightDM) 24/7 Streaming Service ---${NC}\n"
                 if is_service_enabled; then
@@ -2650,7 +3000,7 @@ interactive_menu() {
                     case "$svc_choice" in
                         1)
                             echo -e "\n${YELLOW}Restarting webdesk.service...${NC}"
-                            sudo systemctl restart webdesk.service
+                            sudo systemctl restart webdesk.service 2>/dev/null || systemctl restart webdesk.service 2>/dev/null || true
                             echo -e "${GREEN}✔ webdesk.service restarted successfully.${NC}"
                             ;;
                         2)
@@ -2673,7 +3023,7 @@ interactive_menu() {
                 fi
                 pause_prompt
                 ;;
-            7)
+            8)
                 if [ -f "${SCRIPT_DIR}/webdesk_gui.py" ]; then
                     python3 "${SCRIPT_DIR}/webdesk_gui.py" &
                 elif [ -f "${INSTALL_DIR}/webdesk_gui.py" ]; then
@@ -2681,7 +3031,7 @@ interactive_menu() {
                 fi
                 pause_prompt
                 ;;
-            8)
+            9)
                 clear
                 echo -e "${BOLD}${CYAN}--- WebDesk Live Debug Logs (${LOG_FILE}) ---${NC}"
                 echo -e "${YELLOW}Press Ctrl+C to stop viewing logs...${NC}\n"
@@ -2692,7 +3042,7 @@ interactive_menu() {
                 fi
                 pause_prompt
                 ;;
-            9)
+            10)
                 show_healthcheck
                 pause_prompt
                 ;;
@@ -2900,6 +3250,13 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
     firewall|ufw|iptables)
         configure_firewall false
         ;;
+    display|target-display|set-display)
+        if [ -n "${2:-}" ]; then
+            set_target_display "${2}"
+        else
+            select_target_display
+        fi
+        ;;
     menu|interactive|"")
         if [ -z "${1:-}" ] && { [ -z "${BASH_SOURCE[0]:-}" ] || [ "$0" = "bash" ] || [ "$0" = "sh" ] || [ ! -f "${INSTALL_DIR}/webdesk.sh" ]; } && [ -z "${WEBDESK_RUNNING_UNDER_SYSTEMD:-}" ]; then
             install_webdesk
@@ -2908,7 +3265,7 @@ print(f'\033[1;32m✔ {msg}\033[0m' if ok else f'\033[1;31m✖ {msg}\033[0m')
         fi
         ;;
     *)
-        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|healthcheck|firewall|reinstall|update|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|resolution|profile|reset-users}"
+        echo -e "${BOLD}Usage:${NC} $0 {start|stop|restart|status|display|profile|resolution|healthcheck|firewall|reinstall|update|admin|audit|users|master-password|rdp|rdp-enable|rdp-disable|rdp-status|rdp-mode|rdp-desktop|rdp-port|rdp-user|install|remove|export|import|install-service|uninstall-service|menu|reset-users}"
         exit 1
         ;;
 esac
