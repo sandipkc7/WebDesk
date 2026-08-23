@@ -388,26 +388,41 @@ user_auth.reset_master_password_to_rule()
         chown -R "${REAL_USER}:${REAL_USER}" "${INSTALL_DIR}" "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
     fi
 
-    # Environment Auto-Detection: Physical Monitor vs Headless / Virtual VPS
-    echo -e "${YELLOW}--> Detecting display environment (Physical Screen vs Headless/Cloud VPS)...${NC}"
-    local is_headless=true
+    # Environment Auto-Detection & Mode Configuration
+    echo -e "\n${CYAN}==============================================================${NC}"
+    echo -e "  ${BOLD}[🖥️  Desktop Streaming & Session Mode Setup]${NC}"
+    echo -e "  Select the session mode that matches your environment:\n"
+    echo -e "    ${GREEN}${BOLD}Mode 1)${NC} 🪞 ${BOLD}Physical Monitor Setup${NC} (Live Screen Mirror :0)"
+    echo -e "             • Best for desktop PCs / laptops with a physical screen attached."
+    echo -e "             • Web and RDP clients mirror the exact physical display.\n"
+    echo -e "    ${CYAN}${BOLD}Mode 2)${NC} 🖥️  ${BOLD}Multiple Concurrent Sessions${NC} (Dedicated Virtual Desktop)"
+    echo -e "             • Recommended for Cloud VPS, Headless servers, or multi-session work."
+    echo -e "             • Generates independent high-speed virtual desktop sessions.\n"
+    echo -e "    ${YELLOW}${BOLD}Mode 3)${NC} 👥 ${BOLD}Single Session Multiple Users${NC} (Workstation Collaboration)"
+    echo -e "             • Shared session access with multi-user isolation."
+    echo -e "${CYAN}==============================================================${NC}"
+
+    local auto_mode="2"
     local detected_disp_info
     detected_disp_info=$(get_active_display_and_auth)
     local detected_disp
     detected_disp=$(echo "$detected_disp_info" | cut -d'|' -f1)
-
     if [ -n "$detected_disp" ] && { [ -S "/tmp/.X11-unix/X${detected_disp#:}" ] || [ -r "/sys/class/tty/tty0/active" ]; }; then
-        # Real X11 display socket or active physical console detected
-        is_headless=false
+        auto_mode="1"
     fi
 
-    if [ "$is_headless" = "false" ]; then
-        echo -e "${GREEN}✔ Physical / Desktop Display detected (${detected_disp:-:0}). Defaulting to Mode 1 (Live Screen Mirror).${NC}"
-        RDP_MODE="1"
-    else
-        echo -e "${CYAN}✔ Headless / Cloud VPS / Virtual environment detected. Defaulting to Mode 2 (Dedicated Virtual Desktop).${NC}"
-        RDP_MODE="2"
+    local selected_mode="$auto_mode"
+    if [ -r /dev/tty ] && [ -t 0 -o -t 1 ]; then
+        echo -en "  Select Mode [1, 2, or 3] (Auto-detected default: ${BOLD}Mode ${auto_mode}${NC}): "
+        read -r user_mode_choice </dev/tty 2>/dev/null || user_mode_choice="$auto_mode"
+        case "$user_mode_choice" in
+            1|2|3) selected_mode="$user_mode_choice" ;;
+            *) selected_mode="$auto_mode" ;;
+        esac
     fi
+
+    RDP_MODE="${selected_mode}"
+    echo -e "\n${GREEN}✔ Configured with Mode ${RDP_MODE}.${NC}"
     save_config_var "RDP_MODE" "${RDP_MODE}"
     if [ -f /etc/xrdp/xrdp.ini ]; then
         apply_rdp_config "${RDP_MODE}" "${RDP_PORT}"
@@ -459,9 +474,11 @@ REMOVE_BANNER
     echo -e "${RED}${BOLD}[WebDesk Uninstaller]${NC} This will completely remove WebDesk from your system:"
     echo -e "  • Stop all running WebDesk streaming processes"
     echo -e "  • Disable and remove the 24/7 systemd service (${SERVICE_FILE})"
+    echo -e "  • Disable and stop XRDP remote desktop server"
+    echo -e "  • Close and revert all firewall ports (${WEB_PORT}, ${RES_PORT}, ${AUDIO_PORT}, ${RDP_PORT})"
     echo -e "  • Remove desktop autostart entries (${AUTOSTART_FILE})"
-    echo -e "  • Remove command shortcut (${USER_HOME}/.local/bin/webdesk)"
-    echo -e "  • Delete all downloaded binaries, web assets, and databases (${INSTALL_DIR})"
+    echo -e "  • Remove system commands and symlinks (/usr/local/bin/webdesk & ~/.local/bin/webdesk)"
+    echo -e "  • Delete all downloaded binaries, web assets, SSL certs, and user databases (${INSTALL_DIR})"
     echo ""
 
     if [ "$force_flag" != "-y" ] && [ "$force_flag" != "--force" ] && [ "$force_flag" != "-f" ]; then
@@ -490,15 +507,51 @@ REMOVE_BANNER
         fi
     fi
 
-    echo -e "${YELLOW}--> Removing autostart entries and shortcuts...${NC}"
+    # Disable XRDP server
+    echo -e "${YELLOW}--> Disabling XRDP server...${NC}"
+    if [ "$EUID" -eq 0 ]; then
+        systemctl stop xrdp 2>/dev/null || true
+        systemctl disable xrdp 2>/dev/null || true
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo systemctl stop xrdp 2>/dev/null || true
+        sudo systemctl disable xrdp 2>/dev/null || true
+    fi
+
+    # Close Firewall Ports
+    echo -e "${YELLOW}--> Closing firewall ports (${WEB_PORT}, ${RES_PORT}, ${AUDIO_PORT}, ${RDP_PORT})...${NC}"
+    local fw_ports=("$WEB_PORT" "$RES_PORT" "$AUDIO_PORT" "$RDP_PORT" "3389" "6080" "6085" "6086")
+    if command -v ufw >/dev/null 2>&1; then
+        for p in "${fw_ports[@]}"; do
+            if [ "$EUID" -eq 0 ]; then
+                ufw delete allow "${p}/tcp" >/dev/null 2>&1 || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo ufw delete allow "${p}/tcp" >/dev/null 2>&1 || true
+            fi
+        done
+    elif command -v iptables >/dev/null 2>&1; then
+        for p in "${fw_ports[@]}"; do
+            if [ "$EUID" -eq 0 ]; then
+                iptables -D INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || true
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo iptables -D INPUT -p tcp --dport "$p" -j ACCEPT 2>/dev/null || true
+            fi
+        done
+    fi
+
+    echo -e "${YELLOW}--> Removing autostart entries, commands and symlinks...${NC}"
     rm -f "${AUTOSTART_FILE}" 2>/dev/null || true
     rm -f "${USER_HOME}/.local/bin/webdesk" 2>/dev/null || true
+    if [ -w "/usr/local/bin" ] || [ "$EUID" -eq 0 ]; then
+        rm -f "/usr/local/bin/webdesk" 2>/dev/null || true
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo rm -f "/usr/local/bin/webdesk" 2>/dev/null || true
+    fi
     rm -rf "${SCRIPT_DIR}/__pycache__" 2>/dev/null || true
 
-    echo -e "${YELLOW}--> Removing installation directory (${INSTALL_DIR})...${NC}"
+    echo -e "${YELLOW}--> Deleting installation directory (${INSTALL_DIR})...${NC}"
     rm -rf "${INSTALL_DIR}" 2>/dev/null || true
 
-    echo -e "\n${GREEN}${BOLD}✔ WebDesk has been completely removed from your system.${NC}\n"
+    echo -e "\n${GREEN}${BOLD}✔ WebDesk has been completely uninstalled and all ports closed.${NC}\n"
 }
 
 stop_webdesk_silent() {

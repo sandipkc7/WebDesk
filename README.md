@@ -328,24 +328,24 @@ Connect directly from Windows using the built-in **Remote Desktop Connection (`m
 
 ### 🔀 The 3 RDP Session Modes
 
-WebDesk features **Automated Environment Detection** on install:
-* **Physical PC / Desktop with Screen**: Defaults automatically to **Mode 1 (Live Screen Mirror)**.
-* **Headless / Cloud VPS / Virtual Machine**: Defaults automatically to **Mode 2 (Dedicated Virtual Desktop)** so you never encounter VNC connection errors when no physical monitor is attached.
+WebDesk features **Automated Environment Detection & Interactive Setup** on install:
+* **Mode 1 — Physical Monitor Setup (`:0`)**: Best for desktop PCs / laptops with a physical screen. Web and RDP mirror the exact physical display.
+* **Mode 2 — Multiple Concurrent Sessions (Virtual Desktop)**: Best for Cloud VPS, Headless servers, or running multiple isolated sessions simultaneously.
+* **Mode 3 — Single Session Multiple Users (Workstation Collaboration)**: Allows secondary Linux users to connect simultaneously with isolated input.
 
-| Mode | Name | How It Works & Best Use Case |
+| Mode | Name | Description & Best Use Case |
 | :--- | :--- | :--- |
-| **Mode 1** | **🪞 Live Desktop Mirror (`:0`)** | Connects Windows directly to the active physical monitor / WebDesk web client (`127.0.0.1:5900`). You see and control the exact same live screen. *(Requires an active physical monitor or 24/7 background system service `webdesk install-service`)*. |
-| **Mode 2** | **🖥️ Dedicated Virtual Session** | Opens an independent, high-speed virtual X11 desktop for your existing Linux user account (`remotelinuxuser`) with full access to personal `/home` files. *(Recommended for Headless Servers, Cloud VPS, or when no monitor is plugged in)*. |
-| **Mode 3** | **👥 Multi-User Simultaneous Workstation** | Allows a secondary Linux user (e.g. `remoteuser`) to work simultaneously without sharing the mouse with the local user. |
+| **Mode 1** | **🪞 Physical Monitor Setup (`:0`)** | Connects Windows directly to the active physical screen / WebDesk web client (`127.0.0.1:5900`). You see and control the exact live physical display. *(Requires physical monitor or `webdesk install-service`)*. |
+| **Mode 2** | **🖥️ Multiple Concurrent Sessions** | Opens an independent virtual X11 desktop for your Linux user account (`remotelinuxuser`). *(Recommended for Cloud VPS, Headless Servers, or when no monitor is attached)*. |
+| **Mode 3** | **👥 Single Session Multiple Users** | Allows a secondary Linux user (e.g. `remoteuser`) to work simultaneously without sharing the mouse with the local user. |
 
 <details>
 <summary><b>🪟 View Windows Connection Walkthrough, Security Model & Management Commands</b></summary>
 
-#### 💡 Choosing Between Physical Mirror (:0) and Virtual Desktop (Headless)
-* **If running on a Cloud VPS / Headless server without a physical monitor**:
-  Use **Mode 2** (`webdesk rdp-mode 2`). Mode 2 generates a clean independent X11 desktop and avoids `"VNC error connecting to 127.0.0.1:5900"`.
-* **If running on a desktop PC with a physical screen attached**:
-  Use **Mode 1** (`webdesk rdp-mode 1`) to mirror the exact physical display. Ensure `sudo webdesk install-service` is enabled so the screen stream stays active 24/7 even across logouts.
+#### 💡 Summary of Session Modes:
+* **Physical Monitor Setup (Mode 1)**: `webdesk rdp-mode 1` — Mirrors the physical screen.
+* **Multiple Concurrent Sessions (Mode 2)**: `webdesk rdp-mode 2` — Independent dedicated virtual desktop.
+* **Single Session Multiple Users (Mode 3)**: `webdesk rdp-mode 3` — Multi-user collaboration.
 
 #### 🔒 Security & PAM System Authentication
 * **Strict Linux PAM Verification**: All RDP modes (including Live Mirror) authenticate directly against the central Linux PAM security stack (`/etc/pam.d/xrdp-sesman`). Incorrect passwords immediately trigger `Login failed` and block access.
