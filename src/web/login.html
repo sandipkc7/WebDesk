@@ -299,15 +299,7 @@
             if (!isSecureConnection()) {
                 throw new Error('Insecure connection. HTTPS is strictly required.');
             }
-            // 1. Primary: Same-origin HTTPS (port 6080)
-            try {
-                const res = await fetch(endpoint, options);
-                if (res.status !== 404 && res.status !== 502) {
-                    return res;
-                }
-            } catch (e) {}
-
-            // 2. Fallback: Direct HTTPS to port 6085
+            // Direct HTTPS to API server on port 6085
             const url = `https://${API_HOST}:${API_PORT}${endpoint}`;
             return await fetch(url, options);
         }
