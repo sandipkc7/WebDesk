@@ -65,6 +65,24 @@
         if (!localStorage.getItem('webdesk_token')) {
             window.location.replace('login.html');
         }
+        // Enhanced Client Diagnostics & Error Logger
+        window.addEventListener('error', function(event) {
+            console.error('[WebDesk Client Error]', event.error || event.message);
+            try {
+                if (window.apiFetch) {
+                    window.apiFetch('/api/log', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            level: 'ERROR',
+                            message: (event.error && event.error.stack) || event.message || 'Client Exception',
+                            url: window.location.href,
+                            userAgent: navigator.userAgent
+                        })
+                    }).catch(function(){});
+                }
+            } catch(e) {}
+        });
     </script>
     <script src="app/error-handler.js"></script>
     <script type="module" crossorigin="anonymous" src="app/ui.js"></script>
@@ -74,9 +92,11 @@
 
     <div id="noVNC_fallback_error" class="noVNC_center">
         <div>
-            <div>noVNC encountered an error:</div>
-            <br>
-            <div id="noVNC_fallback_errormsg"></div>
+            <div style="font-weight: 700; font-size: 16px; margin-bottom: 8px;">⚠️ WebDesk Session Notice</div>
+            <div id="noVNC_fallback_errormsg" style="font-size: 13px; line-height: 1.4; color: #f87171;"></div>
+            <div style="margin-top: 14px;">
+                <button onclick="window.location.reload(true)" style="background: #3b82f6; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">🔄 Reload Page (Clear Cache)</button>
+            </div>
         </div>
     </div>
 

@@ -237,6 +237,9 @@ install_webdesk() {
 
     rm -rf "${INSTALL_DIR}/downloads"
 
+    # Synchronize and overwrite latest WebDesk customized web assets (vnc.html, login.html, styles)
+    sync_web_assets
+
     # Self-install webdesk script to permanent directory
     mkdir -p "${INSTALL_DIR}"
     if [ -f "${SCRIPT_PATH:-}" ] && grep -q 'APP_NAME="WebDesk"' "${SCRIPT_PATH}" 2>/dev/null; then

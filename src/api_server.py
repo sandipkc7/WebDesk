@@ -371,6 +371,23 @@ class WebDeskAPIHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"ok": True, "success": True, "status": "active"})
             return
 
+        # Client Telemetry / Diagnostics Logging endpoint
+        if path in ["/api/log", "/api/telemetry"]:
+            client_ip = self.get_client_ip()
+            data = self.read_json_body()
+            level = data.get("level", "INFO")
+            msg = data.get("message", "")
+            ua = data.get("userAgent", self.headers.get("User-Agent", ""))
+            log_line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [CLIENT {level}] IP={client_ip} | MSG={msg} | UA={ua}\n"
+            try:
+                log_file = os.path.join(INSTALL_DIR, "webdesk.log")
+                with open(log_file, "a") as f:
+                    f.write(log_line)
+            except Exception:
+                pass
+            self.send_json(200, {"ok": True, "success": True})
+            return
+
         # 3. Logout endpoint
         if path in ["/api/auth/logout", "/api/logout"]:
             auth_header = self.headers.get("Authorization", "")
